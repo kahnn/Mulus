@@ -1,0 +1,12 @@
+現在、utilの関数群は基本的に MTUnsafe となっているので使い方に注意。
+
+ログについて：
+module 数と予約番号は別ファイルに定義し、それの設定は別のユーティリティ関数で設定ファイルやヘッダー定義を元におこなう。
+
+ uti.h:
+   #define MOD_UTIL  0  -> 予約番号: Network, Thread, Config, ...
+ util.c:
+   mls_util_init() {
+       mls_log_set_ini("/var/tmp/xxxxx.log", (1024*1024), MLS_LOG_INFO, 10);
+       mls_log_set_module(MOD_UTIL, "UTIL", MLS_LOG_WARN);
+       ....
