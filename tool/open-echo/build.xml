@@ -1,0 +1,24 @@
+<?xml version="1.0" ?>
+<project name="build"  basedir="." default="all">
+  <property name="home" location="."/>
+  <property name="home.lib"   location="${home}/lib"/>
+  <property name="home.class" location="${home}/classes"/>
+  <property name="home.src"   location="${home}/src"/>
+
+  <path id="classpath">
+    <fileset dir="${home.lib}" includes="*.jar"/>
+    <pathelement location="${home.class}"/>
+  </path>
+
+  <target name="compile" >
+    <mkdir dir="${home.class}"/>
+    <javac srcdir="${home.src}" destdir="${home.class}" >
+      <classpath refid="classpath" />
+    </javac>
+  </target>
+
+  <target name="all" depends="compile">
+  </target>
+
+</project>
+

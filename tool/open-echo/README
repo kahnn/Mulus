@@ -1,0 +1,204 @@
+■OpneECHOについて
+
+https://github.com/SonyCSL/OpenECHO
+
+==============================================================================
+■概要
+
+https://github.com/SonyCSL/OpenECHO/blob/master/README.md より：
+----
+OpenECHOは、ECHONET LiteプロトコルをJavaで実装したライブラリです。
+現在、詳細規定が存在する全ての機器+コントローラで、合計88機器をサポート
+しています。 機器クラスを継承し、自分の機器ノードを作成することもできます。
+分電盤・コントローラについては実機器での動作を確認しました。
+
+詳しいドキュメントはもうしばらくお待ちください。
+
+※本ソフトウェアの著作権は株式会社ソニーコンピュータサイエンス研究所が
+  保持しており、Apache2ライセンスで配布されています。ライセンスに従い，
+  自由にご利用ください。
+----
+
+==============================================================================
+■作成したサンプルの動かし方
+
+*****************************
+*駆動する側(Controllerを用意する)
+
+cd tool/open-echo
+./controller.sh
+
+実態は、controller.SampleController クラスで、この中で 自ノードの情報を作成し、
+スタートする。標準入力から以下のコマンド操作する。
+----
+pao                               : print all object
+upd                               : update domain information (他のノードにinfを要求する)
+gp node deoj prop-code            : get property
+sp node deoj prop-code prop-value : set property (1byteのみ)
+----
+
+
+*****************************
+*駆動される側(TemperatureSensorを用意する)
+
+cd tool/open-echo
+./sensor.sh
+
+実態は、sensor.SampleTemperatureSensor クラスで、この中で 自ノードの情報を作成し、
+スタートする。標準入力から以下のコマンド操作する。
+----
+pao                               : print all object
+upd                               : update domain information (他のノードにinfを要求する)
+gp node deoj prop-code            : get property
+sp node deoj prop-code prop-value : set property (1byteのみ)
+ct temperature                    : change temperature
+----
+
+==============================================================================
+■メモ
+
+プロパティを取得する際に、汎用メソッドがほしいんだけど、、、
+  EchoObjectには以下のメソッドがあるけど、protected なので汎用アクセスが面倒。
+        protected synchronized byte[] getProperty(byte epc) 
+
+NC2枚ではうまくいかない。
+
+ノードの判別にIPアドレスを利用している。
+正確には、IPアドレス＋そのノードがproxyかどうかで判定している。
+しかも、自ノードのEchoNodeを作成する際に、コンストラクタ内で Echo内のノードリストに自ノードオブジェクトを
+登録するので、自ノードと同じアドレスのノードと混同される。
+なので、NC1枚で仮想的に２つのノードを立ち上げても、アドレスが同じなので他のノードを検知できない。
+
+
+==============================================================================
+■ディレクトリ構成と主要ソース概要
+
+コンパイル済みのバイナリ
+./bin:
+echo.jar
+
+ベースのディレクトリ、基本的なクラスが入っている。
+./src/com/sonycsl/echo:
+  Echo.java
+    >> これがFacade?
+      EchoNode start()
+        EchoSocket.start();
+        EchoNode生成・セットアップ
+      void     stop()
+        EchoSocket.stop();
+      *Echo.updateNodeInstance()
+      *Echo.getInstance()
+      *Echo.getEventListener()  // EventListenerは処理の拡張ポイント
+
+  EchoFrame.java
+    >>  ECHONET Liteの電文(フレーム)を作るクラス
+      byte[] getFrameByteArray()
+
+  EchoProperty.java
+    >> ECHONETオブジェクトが持つプロパティを表すクラス(epc,pdc,edt)
+
+  EchoSocket.java
+    >> ネットワーク＆送受信制御クラス
+       基本的に、受信したFrameから対象のEchoObjectを検索し、
+       そのオブジェクトの receive() メソッドを呼び出す。その先で処理を実施。
+      void start()
+        multicastサーバポートのセットアップ
+        受信スレッド(ReceiverThread)の生成、start()
+      void start()
+        受信スレッド(ReceiverThread)の停止、close()
+        multicastサーバポートのclose()
+      *send,sendGroup()
+
+  EchoUtils.java
+    >> ECHONET共通の各種バイト列生成ロジックやネットワーク周りのユーティリティ
+
+動作時の例外クラス
+./src/com/sonycsl/echo/exception:
+  ＊
+
+ECHONET ノードを表すクラス
+./src/com/sonycsl/echo/node:
+  EchoNode.java
+    >> ノードのプロファイル、デバイス、IPアドレスを管理する
+       ポイントは、実体としての"自"ノードと、Proxyとしての他ノードの両方を
+       表現可能であること。
+       このクラスを使用して、プロファイル情報から(？)他ノードとノード内の
+       各Proxyオブジェクトを生成したりする。
+
+ECHONETオブジェクトの基本クラス
+./src/com/sonycsl/echo/eoj:
+  EchoObject.java
+    >> 抽象クラス。自身が持つプロパティの管理など。
+       重要なのは、ここに通信用の機能が入っている事。
+       あと、isValidProperty(), getProperty(), setProperty() をoverrideする
+       ことで実体となる。
+       自分で何かやりたいときは、そのオブジェクト(proxyでも良いはず)の
+       Senderを使って通信。結果を知りたければ、Receiverを設定しておく。
+      void receive(EchoFrame)
+      void onReceiveSet()
+      void onReceiveGet()
+      public static class Receiver  //RPC型の場合は、これでresponseを受ける★
+      protected static class Sender //上位ではこれの派生クラスを使って通信する
+                                    // Setter, Getter, Informer, InformerC★
+     なお、EchoObjectには以下のメソッドがあるけど、protected なので汎用アクセスが面倒。
+        protected synchronized byte[] getProperty(byte epc) 
+
+  device/  -> see src/com/sonycsl/echo/eoj/device.
+  profile/ -> see src/com/sonycsl/echo/eoj/profile.
+
+プロファイル系のECHONETオブジェクトの実装クラス
+  XXX プロファイルに、サポートオブジェクトを入れるにはどうすればよいか？
+./src/com/sonycsl/echo/eoj/profile:
+  ProfileObject.java
+    >> プロファイル用の基底クラス
+  NodeProfile.java
+    >> ProfileObjectを拡張した抽象クラス
+       これを拡張してノードのプロファイルを作成する。
+
+デバイス系のECHONETオブジェクトの実装クラス
+  XXX どこまで動くのか？ 実際に何か動かしｔ場合は、ここからどうするのか？
+./src/com/sonycsl/echo/eoj/device:
+  DeviceObject.java
+    >> EchoObjectの拡張抽象クラス
+      ここに、基本プロパティに関する扱いが入っている。
+      Senderなどのクラスも併せて拡張されている。
+
+  airconditioner/
+    AirCleaner.java
+    HomeAirConditioner.java
+    ...
+  audiovisual/
+    Display.java
+    ...
+  cookinghousehold/
+    CookingHeater.java
+    ...
+  health/
+    Weighing.java
+  housingfacilities/
+    Battery.java
+    ElectricLock.java
+    WattHourMeter.java
+    SmartElectricEnergyMeter.java
+    PowerDistributionBoardMetering.java
+    ...
+  managementoperation/
+    Controller.java
+      >> DeviceObjectの拡張抽象クラス
+         実際にコントローラをつくる際は、これを拡張して作成するのだろう。
+         余計なプロパティが無いので、これはわかりやすい。
+    Switch.java
+  sensor/
+    ElectricEnergySensor.java
+    TemperatureSensor.java
+      >> DeviceObjectの拡張抽象クラス
+         プロパティの変更をおこなっているところがわかる。多分、必須のみ操作。
+    ...
+
+==============================================================================
+■その他
+
+  Multicast設定の話
+   IP: 224.0.23.0  // IANA で ECHONET に登録済み。
+    http://www.iana.org/assignments/multicast-addresses/multicast-addresses.xml
+   PORT: 3610
