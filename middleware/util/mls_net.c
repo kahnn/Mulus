@@ -10,6 +10,8 @@
 #include <unistd.h>
 #include <sys/param.h>
 #include <sys/types.h>
+#include <sys/socket.h>
+#include <sys/un.h>
 #include <sys/wait.h>
 #include <sys/ioctl.h>
 #include <arpa/inet.h>
@@ -164,8 +166,8 @@ mls_net_mcast_cln_open(const char* maddr, const char *mport,
         goto out;
     }
     cln->sock = sock;
-    cln->tom = tom;
-    cln->tomlen = tomlen;
+    cln->to = tom;
+    cln->tolen = tomlen;
     strncpy(cln->maddr, maddr, sizeof(cln->maddr));
     strncpy(cln->mport, mport, sizeof(cln->mport));
     strncpy(cln->ifaddr, ifaddr, sizeof(cln->ifaddr));
@@ -301,6 +303,241 @@ mls_net_mcast_srv_close(struct mls_net_mcast_srv* srv)
     close(srv->sock);
 
     free(srv);
+}
+
+struct mls_net_ud_srv*
+mls_net_udgram_srv_open(const char* addr)
+{
+    struct mls_net_ud_srv *srv = NULL;
+    int sock = -1;
+    char srv_addr[MLS_NET_LEN_ADDR];
+    struct sockaddr_un name;
+
+    /* Create socket */
+    sock = socket(AF_UNIX, SOCK_DGRAM, 0);
+    if (-1 == sock) {
+        errlog("socket():%s\n", strerror(errno));
+        goto out;
+    }
+    /* Create name. */
+    strcpy(srv_addr, addr);
+    strcat(srv_addr, MLS_NET_UNIX_DOMAIN_SRV_SUFFIX);
+    unlink(srv_addr); /* clean up */
+    memset(&name, 0, sizeof(name));
+    name.sun_family = AF_UNIX;
+    strcpy(name.sun_path, srv_addr);
+
+    if (bind(sock, (struct sockaddr*)&name, sizeof(struct sockaddr_un))) {
+        errlog("bind():binding name to datagram socket:%s\n", strerror(errno));
+        goto out;
+    }
+
+    /* Create server-context */
+    srv = malloc(sizeof(*srv));
+    if (NULL == srv) {
+        errlog("malloc():%s\n", strerror(errno));
+        goto out;
+    }
+    srv->sock = sock;
+    strncpy(srv->addr, srv_addr, sizeof(srv->addr));
+
+out:
+    if (NULL == srv) {
+        if (-1 != sock) {
+            close(sock);
+            unlink(srv_addr);
+        }
+    }
+    return srv;
+}
+
+void
+mls_net_udgram_srv_close(struct mls_net_ud_srv *srv)
+{
+    close(srv->sock);
+    unlink(srv->addr);
+    free(srv);
+}
+
+struct mls_net_ud_cln*
+mls_net_udgram_cln_open(const char *addr)
+{
+    struct mls_net_ud_cln *cln = NULL;
+    int sock = -1;
+    char cln_addr[MLS_NET_LEN_ADDR];
+    struct sockaddr_un name;
+
+    /* Create socket */
+    sock = socket(AF_UNIX, SOCK_DGRAM, 0);
+    if (-1 == sock) {
+        errlog("socket():%s\n", strerror(errno));
+        goto out;
+    }
+    /* Create name. */
+    strcpy(cln_addr, addr);
+    strcat(cln_addr, MLS_NET_UNIX_DOMAIN_CLN_SUFFIX);
+    unlink(cln_addr); /* clean up */
+    memset(&name, 0, sizeof(name));
+    name.sun_family = AF_UNIX;
+    strcpy(name.sun_path, cln_addr);
+
+    if (bind(sock, (struct sockaddr*)&name, sizeof(struct sockaddr_un))) {
+        errlog("bind():binding name to datagram socket:%s\n", strerror(errno));
+        goto out;
+    }
+
+    /* Create client-context */
+    cln = malloc(sizeof(*cln));
+    if (NULL == cln) {
+        errlog("malloc():%s\n", strerror(errno));
+        goto out;
+    }
+    cln->sock = sock;
+    strncpy(cln->addr, cln_addr, sizeof(cln->addr));
+    /* Construct name of socket to send to. */
+    memset(&(cln->to), 0, sizeof(cln->to));
+    cln->to.sun_family = AF_UNIX;
+    strcpy(cln->to.sun_path, addr);
+    strcat(cln->to.sun_path, MLS_NET_UNIX_DOMAIN_SRV_SUFFIX);
+    cln->tolen = sizeof(struct sockaddr_un);
+
+out:
+    if (NULL == cln) {
+        if (-1 != sock) {
+            close(sock);
+            unlink(cln_addr);
+        }
+    }
+    return cln;
+}
+
+void
+mls_net_udgram_cln_close(struct mls_net_ud_cln *cln)
+{
+    close(cln->sock);
+    unlink(cln->addr);
+    free(cln);
+}
+
+struct mls_net_ud_srv*
+mls_net_ustream_srv_open(const char* addr)
+{
+    struct mls_net_ud_srv *srv = NULL;
+    int sock = -1;
+    char srv_addr[MLS_NET_LEN_ADDR];
+    struct sockaddr_un name;
+
+    /* Create socket */
+    sock = socket(AF_UNIX, SOCK_STREAM, 0);
+    if (-1 == sock) {
+        errlog("socket():%s\n", strerror(errno));
+        goto out;
+    }
+    /* Create name. */
+    strcpy(srv_addr, addr);
+    strcat(srv_addr, MLS_NET_UNIX_DOMAIN_SRV_SUFFIX);
+    unlink(srv_addr); /* clean up */
+    memset(&name, 0, sizeof(name));
+    name.sun_family = AF_UNIX;
+    strcpy(name.sun_path, srv_addr);
+
+    if (-1 == bind(sock, (struct sockaddr*)&name, sizeof(struct sockaddr_un))) {
+        errlog("bind():binding name to datagram socket:%s\n", strerror(errno));
+        goto out;
+    }
+
+    if (-1 == listen(sock, 5)) {
+        errlog("listen():%s\n", strerror(errno));
+        goto out;
+    }
+
+#if 0
+    if ((s = accept(sock, (struct sockaddr *)&from, &fromlen)) == -1) {
+        errlog("accept():%s\n", strerror(errno));
+        goto out;
+    }
+#endif
+
+    /* Create server-context */
+    srv = malloc(sizeof(*srv));
+    if (NULL == srv) {
+        errlog("malloc():%s\n", strerror(errno));
+        goto out;
+    }
+    srv->sock = sock;
+    strncpy(srv->addr, srv_addr, sizeof(srv->addr));
+
+out:
+    if (NULL == srv) {
+        if (-1 != sock) {
+            close(sock);
+            unlink(srv_addr);
+        }
+    }
+    return srv;
+}
+
+void
+mls_net_ustream_srv_close(struct mls_net_ud_srv *srv)
+{
+    close(srv->sock);
+    unlink(srv->addr);
+    free(srv);
+}
+
+struct mls_net_ud_cln*
+mls_net_ustream_cln_open(const char *addr)
+{
+    struct mls_net_ud_cln *cln = NULL;
+    int sock = -1;
+    char svr_addr[MLS_NET_LEN_ADDR];
+    struct sockaddr_un name;
+
+    /* Create socket */
+    sock = socket(AF_UNIX, SOCK_STREAM, 0);
+    if (-1 == sock) {
+        errlog("socket():%s\n", strerror(errno));
+        goto out;
+    }
+
+    /* Create name. */
+    strcpy(svr_addr, addr);
+    strcat(svr_addr, MLS_NET_UNIX_DOMAIN_SRV_SUFFIX);
+    memset(&name, 0, sizeof(name));
+    name.sun_family = AF_UNIX;
+    strcpy(name.sun_path, svr_addr);
+
+    if (connect(sock, (struct sockaddr *)&name, sizeof(name)) == -1) {
+        errlog("connect():%s\n", strerror(errno));
+        goto out;
+    }
+
+    /* Create client-context */
+    cln = malloc(sizeof(*cln));
+    if (NULL == cln) {
+        errlog("malloc():%s\n", strerror(errno));
+        goto out;
+    }
+    cln->sock = sock;
+    strncpy(cln->addr, svr_addr, sizeof(cln->addr));
+    /* Construct name of socket to send to. */
+    memcpy(&(cln->to), &name, sizeof(cln->to));
+    cln->tolen = sizeof(struct sockaddr_un);
+
+out:
+    if (NULL == cln) {
+        if (-1 != sock) {
+            close(sock);
+        }
+    }
+    return cln;
+}
+
+void
+mls_net_ustream_cln_close(struct mls_net_ud_cln *cln)
+{
+    close(cln->sock);
+    free(cln);
 }
 
 int

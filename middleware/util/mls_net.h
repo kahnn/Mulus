@@ -4,11 +4,12 @@
 #ifndef _MULUS_NET_H_
 #define _MULUS_NET_H_
 
-#include <sys/socket.h>
 #include <netdb.h>
+#include <sys/socket.h>
 #include <arpa/inet.h>
+#include <sys/un.h>
 
-#define MLS_NET_LEN_ADDR 64
+#define MLS_NET_LEN_ADDR 96
 #define MLS_NET_LEN_PORT 16
 #define MLS_NET_MULTICAST_TTL 16
 
@@ -21,12 +22,27 @@ struct mls_net_mcast_srv {
 
 struct mls_net_mcast_cln {
     int sock;
-    struct sockaddr_storage tom;
-    socklen_t tomlen;
+    struct sockaddr_storage to;
+    socklen_t tolen;
     char maddr[MLS_NET_LEN_ADDR];
     char mport[MLS_NET_LEN_PORT];
     char ifaddr[MLS_NET_LEN_ADDR];
     char lport[MLS_NET_LEN_PORT];
+};
+
+#define MLS_NET_UNIX_DOMAIN_SRV_SUFFIX "_srv"
+#define MLS_NET_UNIX_DOMAIN_CLN_SUFFIX "_cln"
+
+struct mls_net_ud_srv {
+    int sock;
+    char addr[MLS_NET_LEN_ADDR];
+};
+
+struct mls_net_ud_cln {
+    int sock;
+    struct sockaddr_un to;
+    socklen_t tolen;
+    char addr[MLS_NET_LEN_ADDR];
 };
 
 /*
@@ -39,6 +55,18 @@ extern void mls_net_mcast_srv_close(struct mls_net_mcast_srv*);
 
 extern struct mls_net_mcast_cln* mls_net_mcast_cln_open(const char* maddr, const char *mport, const char* ifaddr, const char *lport);
 extern void mls_net_mcast_cln_close(struct mls_net_mcast_cln*);
+
+extern struct mls_net_ud_srv* mls_net_udgram_srv_open(const char*);
+extern void mls_net_udgram_srv_close(struct mls_net_ud_srv*);
+
+extern struct mls_net_ud_cln* mls_net_udgram_cln_open(const char*);
+extern void mls_net_udgram_cln_close(struct mls_net_ud_cln*);
+
+extern struct mls_net_ud_srv* mls_net_ustream_srv_open(const char*);
+extern void mls_net_ustream_srv_close(struct mls_net_ud_srv*);
+
+extern struct mls_net_ud_cln* mls_net_ustream_cln_open(const char*);
+extern void mls_net_ustream_cln_close(struct mls_net_ud_cln*);
 
 extern int mls_net_getaddr_by_ifname(char* ifname, int af, char* addr, int addrlen);
 

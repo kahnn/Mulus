@@ -5,7 +5,7 @@
 #include    "mls_net.h"
 
 void
-client_dispatch(struct mls_net_mcast_cln* cln)
+client_dispatch(struct mls_net_ud_cln* cln)
 {
     int sock = cln->sock;
     fd_set mask;
@@ -20,7 +20,7 @@ client_dispatch(struct mls_net_mcast_cln* cln)
         fd_set ready;
         struct timeval timeout;
         ready = mask;
-        timeout.tv_sec = 1;
+        timeout.tv_sec = 10;
         timeout.tv_usec = 0;
 
         switch (select(width, (fd_set*)&ready, NULL, NULL, &timeout)) {
@@ -31,16 +31,14 @@ client_dispatch(struct mls_net_mcast_cln* cln)
             /* timeout */
             break;
         default:
-            if (FD_ISSET(sock, &ready)) {
+            if (FD_ISSET(cln->sock, &ready)) {
                 struct sockaddr_storage from;
                 socklen_t fromlen;
                 ssize_t len;
                 char buf[128];
-                int ret;
-                char nbuf[NI_MAXHOST], sbuf[NI_MAXSERV];
 
                 fromlen = sizeof(from);
-                if ((len = recvfrom(sock,
+                if ((len = recvfrom(cln->sock,
                             buf, sizeof(buf),
                             0,
                             (struct sockaddr*)&from, &fromlen)) == -1)
@@ -49,16 +47,6 @@ client_dispatch(struct mls_net_mcast_cln* cln)
                     is_end = 1;
                     break;
                 }
-                if ((ret = getnameinfo((struct sockaddr *)&from, fromlen,
-                            nbuf, sizeof(nbuf),
-                            sbuf, sizeof(sbuf),
-                            NI_NUMERICHOST | NI_NUMERICSERV)) != 0)
-                {
-                    fprintf(stderr,
-                        "getnameinfo():%s\n", gai_strerror(ret));
-                }
-                fprintf(stdout,
-                    "recvfrom:%s:%s:len(%d)\n", nbuf, sbuf, (int)len);
                 buf[len] = '\0';
                 fprintf(stdout, "server> %s", buf);
             }
@@ -71,7 +59,7 @@ client_dispatch(struct mls_net_mcast_cln* cln)
                     is_end = 1;
                     break;
                 }
-                if ((len = sendto(sock,
+                if ((len = sendto(cln->sock,
                             buf, strlen(buf),
                             0,
                             (struct sockaddr *)&(cln->to),
@@ -90,40 +78,17 @@ client_dispatch(struct mls_net_mcast_cln* cln)
 int
 main(int argc, char *argv[])
 {
-    struct mls_net_mcast_cln* cln = NULL;
-    char ifaddr[256];
+    struct mls_net_ud_cln* cln = NULL;
 
-    if (argc <= 4) {
-        fprintf(stderr, "%s mc-address mc-port if-address l-port\n", argv[0]);
-        fprintf(stderr, "   mc-address: 224.0.23.0\n");
-        fprintf(stderr, "   mc-port:    3610\n");
-        fprintf(stderr, "   if-address: 0.0.0.0 -or- eth0\n");
-        fprintf(stderr, "   l-port:     0\n");
+    if (argc <= 1) {
+        fprintf(stderr, "%s address\n", argv[0]);
+        fprintf(stderr, "   address: /tmp/test_ud_dgram\n");
         goto out;
     }
 
-#if 0
-    mls_net_show_if_all();
-#endif
-
-    {
-        int ret = 0;
-        if (isdigit(*(argv[3]))) {
-            strncpy(ifaddr, argv[3], sizeof(ifaddr));
-        } else {
-            ret = mls_net_getaddr_by_ifname(argv[3], AF_INET, 
-                ifaddr, sizeof(ifaddr));
-            if (0 != ret) {
-                fprintf(stderr, "mls_net_getaddr_by_ifname(%d) error.\n", ret);
-                goto out;
-            }
-        }
-        fprintf(stdout, "ifaddr => %s\n", ifaddr);
-    }
-
-    cln = mls_net_mcast_cln_open(argv[1], argv[2], ifaddr, argv[4]);
+    cln = mls_net_udgram_cln_open(argv[1]);
     if (NULL == cln) {
-        fprintf(stderr, "mls_net_mcast_cln_open() error.\n");
+        fprintf(stderr, "mls_net_udgram_cln_open() error.\n");
         goto out;
     }
 
@@ -132,7 +97,7 @@ main(int argc, char *argv[])
 
 out:
     if (NULL != cln)
-        mls_net_mcast_cln_close(cln);
+        mls_net_udgram_cln_close(cln);
 
     return 0;
 }
