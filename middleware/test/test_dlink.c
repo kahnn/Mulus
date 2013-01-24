@@ -30,7 +30,7 @@ main(int argc, char *argv[])
     mls_dlink_append(&(c1.dlink), &(c2.dlink));
     mls_dlink_insert(&head, &(c3.dlink));
 
-    mls_dlist_loop(&head, work)
+    mls_dlink_loop(&head, work)
     {
         struct test_container *con = 
             mls_dlink_container(work, struct test_container, dlink);
@@ -39,12 +39,22 @@ main(int argc, char *argv[])
 
     mls_dlink_remove(&(c2.dlink));
 
-    mls_dlist_loop(&head, work)
+    mls_dlink_loop(&head, work)
     {
         struct test_container *con = 
             mls_dlink_container(work, struct test_container, dlink);
         printf("2>> %p, %d, %d\n", con, con->data1, con->data2);
     }
+
+    printf("is empty() ==  %d\n", mls_dlink_is_empty(&head));
+    
+    while (NULL != (work = mls_dlink_pop(&head))) {
+        struct test_container *con = 
+            mls_dlink_container(work, struct test_container, dlink);
+        printf("3>> %p, %d, %d\n", con, con->data1, con->data2);
+    }
+
+    printf("is empty() ==  %d\n", mls_dlink_is_empty(&head));
 
     return 0;
 }
