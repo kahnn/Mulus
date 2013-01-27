@@ -3,7 +3,7 @@ CFLAGS = -g -Wall -DDEBUG -I../include
 LDFLAGS = 
 
 OUT = libmls_util.a
-SRCS = mls_log.c mls_config.c mls_net.c mls_evt.c
+SRCS = mls_log.c mls_config.c mls_net.c mls_evt.c mls_type.c
 OBJS = $(SRCS:.c=.o)
 
 .c.o:

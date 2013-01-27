@@ -76,4 +76,17 @@ static inline mls_dlink_t* mls_dlink_remove(mls_dlink_t *dl)
 #define mls_dlink_container(_addr, _type, _member) \
     ((_type *)(((char*)(_addr)) - offsetof(_type, _member)))
 
+/*
+ * @arg _base anchor.
+ * @arg _work .
+ */
+#define mls_dlink_count(_base, _work)           \
+    ({                                          \
+        int _cnt = 0;                           \
+        mls_dlink_loop((_base), (_work)) {      \
+            _cnt++;                             \
+        }                                       \
+        _cnt;                                   \
+    })
+
 #endif /* _MULUS_DLINK_H_ */
