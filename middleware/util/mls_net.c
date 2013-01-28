@@ -40,8 +40,8 @@
 
 /* ######################################################################## */
 
-static int
-_get_sockaddr_info(const char *hostnm, const char *portnm,
+int
+mls_net_get_sockaddr_info(const char *hostnm, const char *portnm,
     struct sockaddr_storage *saddr, socklen_t *saddr_len)
 {
     struct addrinfo hints, *res = NULL;
@@ -154,8 +154,8 @@ mls_net_mcast_cln_open(const char* maddr, const char *mport,
     }
 
     /* Get multicast-address */
-    if (_get_sockaddr_info(maddr, mport, &tom, &tomlen) == -1) {
-        errlog("_get_sockaddr_info():%s\n", strerror(errno));
+    if (mls_net_get_sockaddr_info(maddr, mport, &tom, &tomlen) == -1) {
+        errlog("mls_net_get_sockaddr_info():%s\n", strerror(errno));
         goto out;
     }
 
@@ -195,6 +195,8 @@ mls_net_mcast_cln_close(struct mls_net_mcast_cln* cln)
 struct mls_net_mcast_srv*
 mls_net_mcast_srv_open(const char* maddr, const char *mport, const char *ifaddr)
 {
+    struct sockaddr_storage tom;
+    socklen_t tomlen;
     struct addrinfo *res = NULL;
     int sock = -1;
     struct mls_net_mcast_srv* srv = NULL;
@@ -263,6 +265,12 @@ mls_net_mcast_srv_open(const char* maddr, const char *mport, const char *ifaddr)
         }
     }
 
+    /* Get multicast-address */
+    if (mls_net_get_sockaddr_info(maddr, mport, &tom, &tomlen) == -1) {
+        errlog("mls_net_get_sockaddr_info():%s\n", strerror(errno));
+        goto out;
+    }
+
     /* Create server-context */
     srv = malloc(sizeof(*srv));
     if (NULL == srv) {
@@ -270,6 +278,8 @@ mls_net_mcast_srv_open(const char* maddr, const char *mport, const char *ifaddr)
         goto out;
     }
     srv->sock = sock;
+    srv->to = tom;
+    srv->tolen = tomlen;
     strncpy(srv->maddr, maddr, sizeof(srv->maddr));
     strncpy(srv->mport, mport, sizeof(srv->mport));
     strncpy(srv->ifaddr, ifaddr, sizeof(srv->ifaddr));

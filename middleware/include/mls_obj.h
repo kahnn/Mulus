@@ -138,11 +138,18 @@ typedef int (*mls_epr_set_t)(struct mls_eoj*,unsigned char,unsigned char*,unsign
  */
 typedef int (*mls_epr_anno_t)(struct mls_eoj*,unsigned char,unsigned char*,unsigned char*);
 
+#define MLS_EPR_ACCESS_GET  (0x01)
+#define MLS_EPR_ACCESS_SET  (0x02)
+#define MLS_EPR_ACCESS_ANNO (0x04)
+
 /*
  * ECHONET Lite Property
  */
 struct mls_epr {
     unsigned char epc; /* property code */
+
+    /* access attribute */
+    int access_attr;
 
     /* access function */
     mls_epr_get_t getf;
@@ -158,11 +165,15 @@ struct mls_node;
 /*
  * ECHONET Lite Object
  */
-struct mls_eoj {
-    /* Object Code */
+struct mls_eoj_code {
     unsigned char cgc; /* class group code */
     unsigned char clc; /* class code */
     unsigned char inc; /* instance code */
+};
+
+struct mls_eoj {
+    /* Object Code */
+    struct mls_eoj_code code;
 
     /* Properties */
     unsigned int nprops;
@@ -174,5 +185,9 @@ struct mls_eoj {
 };
 
 /* ---------------------------------------------------------------- */
+
+extern struct mls_epr* mls_eoj_get_property(struct mls_eoj*, unsigned char);
+extern int mls_eoj_set_eojcode(struct mls_eoj_code*, unsigned char*, unsigned int*);
+extern int mls_eoj_get_eojcode(struct mls_eoj_code*, unsigned char*, unsigned int*);
 
 #endif /* _MULUS_OBJ_H_ */

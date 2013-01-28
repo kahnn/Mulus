@@ -15,6 +15,8 @@
 
 struct mls_net_mcast_srv {
     int sock;
+    struct sockaddr_storage to;
+    socklen_t tolen;
     char maddr[MLS_NET_LEN_ADDR];
     char mport[MLS_NET_LEN_PORT];
     char ifaddr[MLS_NET_LEN_ADDR];
@@ -69,6 +71,7 @@ extern struct mls_net_ud_cln* mls_net_ustream_cln_open(const char*);
 extern void mls_net_ustream_cln_close(struct mls_net_ud_cln*);
 
 extern int mls_net_getaddr_by_ifname(char* ifname, int af, char* addr, int addrlen);
+extern int mls_net_get_sockaddr_info(const char *hostnm, const char *portnm, struct sockaddr_storage *saddr, socklen_t *saddr_len);
 
 extern int mls_net_show_if_all(void);
 extern int mls_net_show_if_by_name(char* name);

@@ -66,7 +66,7 @@ static inline mls_dlink_t* mls_dlink_remove(mls_dlink_t *dl)
  * @arg _work .
  */
 #define mls_dlink_loop(_base, _work) \
-    for (_work = (_base)->next; _work != (_base); _work = _work->next)
+    for ((_work) = (_base)->next; (_work) != (_base); (_work) = (_work)->next)
 
 /*
  * @arg _addr address of dlink_t*.

@@ -2,7 +2,7 @@
 #include "mls_type.h"
 
 int
-mls_type_set_char(unsigned char* buf, unsigned char* len, char src)
+mls_type_set_char(unsigned char* buf, unsigned int* len, char src)
 {
     int size = 1;
     assert(1 <= *len);
@@ -12,7 +12,7 @@ mls_type_set_char(unsigned char* buf, unsigned char* len, char src)
 }
 
 int
-mls_type_set_short(unsigned char* buf, unsigned char* len, short src)
+mls_type_set_short(unsigned char* buf, unsigned int* len, short src)
 {
     int size = 2;
     assert(2 <= *len);
@@ -23,7 +23,7 @@ mls_type_set_short(unsigned char* buf, unsigned char* len, short src)
 }
 
 int
-mls_type_set_int(unsigned char* buf, unsigned char* len, int src)
+mls_type_set_int(unsigned char* buf, unsigned int* len, int src)
 {
     int size = 4;
     assert(4 <= *len);
@@ -36,7 +36,7 @@ mls_type_set_int(unsigned char* buf, unsigned char* len, int src)
 }
 
 char
-mls_type_get_char(unsigned char* buf, unsigned char len)
+mls_type_get_char(unsigned char* buf, unsigned int len)
 {
     char dst = 0;
     assert(1 <= len);
@@ -45,7 +45,7 @@ mls_type_get_char(unsigned char* buf, unsigned char len)
 }
 
 short
-mls_type_get_short(unsigned char* buf, unsigned char len)
+mls_type_get_short(unsigned char* buf, unsigned int len)
 {
     short dst = 0;
     assert(2 <= len);;
@@ -55,7 +55,7 @@ mls_type_get_short(unsigned char* buf, unsigned char len)
 }
 
 int
-mls_type_get_int(unsigned char* buf, unsigned char len)
+mls_type_get_int(unsigned char* buf, unsigned int len)
 {
     int dst = 0;
     assert(4 <= len);

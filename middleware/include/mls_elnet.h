@@ -42,6 +42,20 @@
 #define MLS_ELNET_EHD1_ECHONET_LITE ((unsigned char)0x10)
 #define MLS_ELNET_EHD2_REGULAR ((unsigned char)0x81)
 
+#define MLS_ELNET_PACKET_LENGTH (32*1024)
+/* EHD1(1) + EHD2(1) + TID(2) + SEOJ(3) + DEOJ(3) + ESV(1) + OPC(1) */
+#define MLS_ELNET_PACKET_BASE_LENGTH (1 + 1 + 2 + 3 + 3 + 1 + 1)
+
+struct mls_elnet_frame_base {
+    unsigned char ehd1;
+    unsigned char ehd2;
+    unsigned short tid;
+    struct mls_eoj_code seoj;
+    struct mls_eoj_code deoj;
+    unsigned char esv;
+    unsigned char opc;
+};
+
 /*
  * Context.
  */
@@ -53,5 +67,10 @@ extern struct mls_elnet *mls_elnet_init(char *ifname);
 extern void mls_elnet_term(struct mls_elnet*);
 extern void mls_elnet_event_handler(struct mls_evt*, void*);
 extern void mls_elnet_announce_profile(struct mls_elnet*,struct mls_node*);
+
+extern unsigned char* mls_elnet_set_packet_base(unsigned short tid,
+    struct mls_eoj_code *seoj, struct mls_eoj_code *deoj,
+    unsigned char esv, unsigned char opc,
+    unsigned char *buf, unsigned int *blen);
 
 #endif /* _MULUS_ELNET_H_ */

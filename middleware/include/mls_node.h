@@ -17,5 +17,6 @@ struct mls_node {
 
 extern struct mls_node* mls_el_node_create(struct mls_eoj* profile);
 extern void mls_el_node_add_device(struct mls_node*, struct mls_eoj*);
+extern struct mls_eoj* mls_el_node_get_device(struct mls_node*, struct mls_eoj_code*);
 
 #endif /* _MULUS_NODE_H_ */

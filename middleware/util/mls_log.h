@@ -42,7 +42,7 @@ extern int mls_log_ini(char* path, int fsize, enum mls_log_level def, int nmod);
 extern void mls_log_fin(void);
 extern int mls_log_set_module(int mod, char* mod_name, enum mls_log_level);
 extern void mls_log_printf(int mod, enum mls_log_level level, const char* func, int line, char* fmt, ...);
-extern void mls_log_hexdump(char* data, unsigned long size);
+extern void mls_log_hexdump(char* data, unsigned long size, FILE*);
 
 static inline int
 mls_log_is_output(int mod, enum mls_log_level level)

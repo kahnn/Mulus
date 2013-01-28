@@ -178,9 +178,12 @@ Address   |>>     8bytes      >>| |>>      8bytes     <<|  |>>  to char  <<|
 12345678  00 11 22 33 44 55 66 77-88 99 AA BB CC DD EE FF  01234567890abcdef
 */
 void
-mls_log_hexdump(char* data, unsigned long size)
+mls_log_hexdump(char* data, unsigned long size, FILE* outfp)
 {
     unsigned long addr = 0;
+
+    if (NULL == outfp)
+        outfp = _outfp;
 
     while (addr < size) {
         char lbuf[80+1], *lpos = lbuf;
@@ -209,6 +212,6 @@ mls_log_hexdump(char* data, unsigned long size)
         cbuf[cpos] = '\0';
   output:
         sprintf(lpos, "  %s", cbuf);
-        fprintf(_outfp, "%s\n", lbuf);
+        fprintf(outfp, "%s\n", lbuf);
     }
 }

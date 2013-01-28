@@ -43,7 +43,7 @@ static int
 _get_temp_value(struct mls_eoj* eoj, unsigned char epc,
     unsigned char* buf, unsigned char* len)
 {
-    return mls_type_set_short(buf, len, _temp_value);
+    return mls_type_set_short(buf, (unsigned int*)len, _temp_value);
 }
 
 int
@@ -62,52 +62,63 @@ static struct mls_epr props[] = {
     /* device object super class */
     {
         .epc = MLS_EL_EPC_OPERATION_STATUS,
+        .access_attr = (MLS_EPR_ACCESS_GET|MLS_EPR_ACCESS_SET),
         .getf = dummy_epr_get,
         .setf = dummy_epr_set,
         .is_anno_when_changed = 1,
     },
     {
         .epc = MLS_EL_EPC_INSTALLATION_LOCATION,
+        .access_attr = (MLS_EPR_ACCESS_GET|MLS_EPR_ACCESS_SET),
         .getf = dummy_epr_get,
         .setf = dummy_epr_set,
         .is_anno_when_changed = 1,
     },
     {
         .epc = MLS_EL_EPC_STANDARD_VERSION_INFORMATION,
+        .access_attr = (MLS_EPR_ACCESS_GET),
         .getf = dummy_epr_get,
     },
     {
         .epc = MLS_EL_EPC_FAULT_STATUS,
+        .access_attr = (MLS_EPR_ACCESS_GET),
         .getf = dummy_epr_get,
         .is_anno_when_changed = 1,
     },
     {
         .epc = MLS_EL_EPC_MANUFACTURER_CODE,
+        .access_attr = (MLS_EPR_ACCESS_GET),
         .getf = dummy_epr_get,
     },
     {
         .epc = MLS_EL_EPC_STATUS_CHANGE_ANNOUNCEMENT_PROPERTY_MAP,
+        .access_attr = (MLS_EPR_ACCESS_GET),
         .getf = dummy_epr_get,
     },
     {
         .epc = MLS_EL_EPC_SET_PROPERTY_MAP,
+        .access_attr = (MLS_EPR_ACCESS_GET),
         .getf = dummy_epr_get,
     },
     {
         .epc = MLS_EL_EPC_GET_PROPERTY_MAP,
+        .access_attr = (MLS_EPR_ACCESS_GET),
         .getf = dummy_epr_get,
     },
     /* temperature sensor class */
     {
         .epc = MLS_EL_EPC_MEASURED_TEMPERATURE_VALUE,
+        .access_attr = (MLS_EPR_ACCESS_GET),
         .getf = _get_temp_value,
     },
 };
 
 static struct mls_eoj temp_sensor = {
-    .cgc = MLS_EL_CGC_SENSOR,
-    .clc = MLS_EL_CLC_TEMPERATURE_SENSOR,
-    .inc = 0x01,
+    .code = {
+        .cgc = MLS_EL_CGC_SENSOR,
+        .clc = MLS_EL_CLC_TEMPERATURE_SENSOR,
+        .inc = 0x01,
+    },
     .nprops = sizeof(props)/sizeof(struct mls_epr),
     .props = props,
 };
