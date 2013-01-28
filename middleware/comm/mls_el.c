@@ -35,17 +35,52 @@ mls_el_get_tag(struct mls_el_ctx *ctx) { return ctx->tag; }
 
 /* ------------------------------------------------------ */
 
+/*
+ * time interval handler.
+ */
+static void
+_timeinterval_handler(struct mls_evt* evt, void* tag)
+{
+    struct mls_el_ctx *ctx = (struct mls_el_ctx *)tag;
+    struct mls_node *node = ctx->lnode;
+    mls_dlink_t *work;
+
+#if 0
+    fprintf(stderr, "TIMEOUT: %u %s\n",
+        (unsigned int)time(NULL), (char*)tag);
+#endif
+    /* Call global user handler. */
+    if (NULL != ctx->tinterval) {
+        ctx->tinterval(evt, tag);
+    }
+
+    /* Call node profile handler. */
+    if (NULL != node->prof->tinterval) {
+        node->prof->tinterval(evt, tag);
+    }
+
+    /* Call device opjects handler. */
+    mls_dlink_loop(&(node->eojs_list), work)
+    {
+        struct mls_eoj* eoj =
+            mls_dlink_container(work, struct mls_eoj, eojs_list);
+        if (NULL != eoj->tinterval) {
+            eoj->tinterval(evt, tag);
+        }
+    }
+}
+
 static int
 _set_event(struct mls_el_ctx *ctx)
 {
     struct mls_evt* evt;
     int ret = 0;
 
-    evt = mls_evt_ini(10); /* 10sec interval */
+    evt = mls_evt_ini(MLS_EL_TIMEINTERVAL_SEC);
 
     /* time interval */
     ret = mls_evt_add_handle(evt, MLS_EVT_TIMEOUT, 0 /* timeout key=0 */,
-        ctx->tinterval, ctx);
+        _timeinterval_handler, ctx);
     if (ret < 0) {
         fprintf(stderr, "ERROR: mls_evt_add_handle(%d)\n", ret);
         goto out;
@@ -81,14 +116,14 @@ mls_el_create_context(struct mls_node *local_node,
 {
     struct mls_el_ctx *ctx = NULL;
 
-    ctx->lnode = local_node;
-    ctx->elnet = elnet;
-    ctx->csrv = csrv;
-    ctx->csrvfunc = csrvfunc;
-    ctx->tinterval = tinterval;
-    ctx->tag = tag;
+    lctx.lnode = local_node;
+    lctx.elnet = elnet;
+    lctx.csrv = csrv;
+    lctx.csrvfunc = csrvfunc;
+    lctx.tinterval = tinterval;
+    lctx.tag = tag;
 
-    if (_set_event(ctx) < 0) {
+    if (_set_event(&lctx) < 0) {
         /* XXX error handling */
         goto out;
     }

@@ -2,8 +2,8 @@
 
 ## 1. プロジェクト概要
 
-Project Mulus (以降 Mulus) は、[エコーネットコンソーシアム ](http://www.echonet.gr.jp/)による[ECHONET Lite 規格 Ver1.01](http://www.echonet.gr.jp/spec/spec_v101_lite.htm)をサポートする機器実現のための、C言語で書かれた ToolKit です。
-今後普及が進むと考えられる HEMS において、自家製家電を組み入れたり、自分の好みで市販家電の制御を行ったりしたい愛好家の手助けになることを目指しています。
+Project Mulus (以降 Mulus) は、[エコーネットコンソーシアム](http://www.echonet.gr.jp/)による[ECHONET Lite 規格 Ver1.01](http://www.echonet.gr.jp/spec/spec_v101_lite.htm)をサポートする機器実現のための、C言語で書かれた ToolKit です。
+元々は個人的な家電Hackのために始めましたが、今後普及が進むと考えられる HEMS において、自家製家電を組み入れたり、自分の好みで市販家電の制御を行ったりしたい愛好家の手助けになることを目指しています。
 
 
 ## 2. 機能一覧＆サポート状況
@@ -33,22 +33,31 @@ DEV OBJECT共通処理のくくりだし
 パケットBASEヘッダのset/getを作って、それで共通処理する。
 パケットの取り扱いを綺麗にするため、bytebuffer機能を取り入れてソース整理する。
 コマンドで使うマルチキャスト用のインターフェース(eth0など)を引数指定可能にする。
+mls_el_ctx などtermでのリソース解放ができていないところがあるので、対応する
 全体的に統一したエラー出力機構を導入する。
 ディレクトリ構成、ファイル配置、Makefileの整理を行う
-デバイスオブジェクトは、テンプレート型式で生成できるようにする。それをベースに各自が開発する。
+デバイスオブジェクトは、テンプレート型式で生成できるようにする。それをベースに各自が開発する（予定）。
+テストは、まだまだ全然おこなわれていない。
 共通-------------
 
 ---------------------------------------------------------
-- ECHONET Lite サポート仕様＆実装制限
+- ECHONET Lite サポート仕様制限
 
 SetGetについてはエラー（返却なし）とする
 インスタンスコードが指定の際の処理が無い。
 EPR処理で個数制限がある場合の処理が無い。
+他ノードの情報(proxy)を保持することはできない。必要があれば、自分で処理する。
+
+- Mulus実装制限
+
+アーキテクチャとしてMultiThreadには対応していない。MTSafeでもないので気をつけること。
+シングルスレッドモデルなので、タイマー処理の中や、各プロパティ処理の中で長時間処理をおこなったりsleepしたりしないこと。
+タイマー処理間隔は10秒固定だが、他の処理などにも影響され、必ずしも正確な時間にはならない。したがって、必要に応じてハンドラ中で時間の確認を行う事。
 
 ---------------------------------------------------------
 - コマンド仕様
 
-el_prop  {-s|-g} remote-host cgc clc inc epc [value]
+el_prop {-s|-g} remote-host cgc clc inc epc [value]
   (1) 指定されたコード(アドレス)のオブジェクトが持つプロパティを取得する
       -g 指定する。
       -gの場合は valueは不要
@@ -60,18 +69,19 @@ el_prop  {-s|-g} remote-host cgc clc inc epc [value]
 
   - remote-host は ipaddr:port 型式とする。例えば "192.168.11.13:3561"
   - inc (インスタンスコード)は、基本的に0x1とする
-  - 値の指定は16進(0x付き)でおこなう。1バイトよりも大きい場合は、"|" で区切る
-    例えば、4バイトデータは "0x00|0x00|0x42|0x11" となる
+  - 値の指定は16進(0x付き)でおこなう。1バイトよりも大きい場合は、以下のルール。
+    基本的には 16進バイナリ形式。例えば、0x00,0x00,0x42,0x11 のような4バイト
+    データの場合は, "00004211" となる
 
   異常終了すると、エラーは stderr に出力される。終了コードが 0 以外となる。
+    例えば、set不可の項目に -s でアクセスなど。
   正常終了すると、処理結果は stdout に出力される。終了コードが 0 となる。
   結果出力フォーマットは以下の通り。
     epc,edt
-  例えば以下のようになる。(ここでも'|'でbyte単位で区切る)
-    0x82,0x00|0x00|0x42|0x11
+  例えば以下のようになる。(epcについては 0x付きであることに注意)
+    0x82,00004211
 
-
-el_node cgc clc inc
+el_discover cgc clc inc
   コマンド内でマルチキャストをおこない、発見したクラスインスタンス機器を
   返す。1つの機器(ノード)に対し、1行で以下の情報を出力する。
   （機器が1つでも発見できたら出力してコマンド終了する）
@@ -85,50 +95,23 @@ el_node cgc clc inc
     (1件も見つからなかった場合を含む)
   正常終了すると、処理結果は stdout に出力される。終了コードが 0 となる。
 
-
-sm_prop {-s|-g} cgc clc inc epc [value]
+device_config {-s|-g} cgc clc inc epc [value]
   指定されたコードのオブジェクト(ノード)における内部状態を直接、取得/変更する
   remote-host 引数が異なる以外は、el_prop と同じ。
 
-
-el_pdump message-num
-  パケットダンプ取得コマンド。
-  最新のメッセージを「降順」で message-num で指定した数だけ取得する。
-  指定可能な最大数は 1000 である。
-  異常終了すると、エラーは stderr に出力される。終了コードが 0 以外となる。
-  正常終了すると、処理結果は stdout に出力される。終了コードが 0 となる。
-    (1件も見つからなかった場合を含む)
-  * 実装上のポイント
-    デーモン側で、１パケット１ファイルで番号をファイル名にしてメッセージ内容を
-    保存する。番号は最大で1000、書き込み先番号を記録したファイルを保存する。
-    一種のリングバッファ構成となっており、現在の書き込み先番号から逆順にファイル
-    を読み込んで出力する。番号に対応するファイルがないか、元に戻ってきた場合は
-    それ以上のメッセージが無い。
-    書き出し先ファイル名ファイルは、最初に作成しておく事とする。
-
-  
- ※各コマンドは他ノードからのアナウンスを待ち合わせて何かする機能は必要ない
-   また、他ノードの指定は明示的に行われるので、他ノードの情報(proxy)を保持する
-   必要もない。
-
 ---------------------------------------------------------
-- サンプル機器の仕様
+- 温度センサー サンプルの仕様
 
-  初期化と自ノードのプロファイル通知をおこなう
-
-  別ノードからGet要求があったら、対応するプロパティの値を応答する
+  - サポートするプロパティは仕様上で必須となっている項目のみ
+  - 初期化と自ノードのプロファイル通知をおこなう
+  - 別ノードからGet要求があったら、対応するプロパティの値を応答する
     Get不可等で処理エラーの場合は、無視あるいはエラー応答する
-
-  定期的に(実機器を見に行って)自ノード機器のプロパティを更新する
-    その際に、プロパティがAnnoならば、INFを送信する
-
-  別ノードからSet要求があったら、対応するプロパティを更新する
+  - 別ノードからSet要求があったら、対応するプロパティを更新する
     その際に、プロパティがAnnoならば、INFを送信する
     Set不可等で処理エラーの場合は、無視あるいはエラー応答する
-
-  自ノードのプロファイル要求があった場合はプロファイルを通知する
-
-  設定ファイルの取り扱いをどうするか？
+  - 自ノードのプロファイル要求があった場合はプロファイルを通知する
+  - 定期的に自ノード機器のプロパティを更新する
+    (その際に、プロパティがAnnoならば、INFを送信するが、今回のサンプルでは無し)
 
 ---------------------------------------------------------
 ```
@@ -389,26 +372,4 @@ COMMIT
 ## 7. Copyright and license
 
 Mulus is free software, available under the terms of a [MIT license](http://opensource.org/licenses/mit-license.php).
-
-```
-Copyright (c) 2013 Hiroshi "Kahnn" Ikeda
-
-Permission is hereby granted, free of charge, to any person obtaining
-a copy of this software and associated documentation files (the
-"Software"), to deal in the Software without restriction, including
-without limitation the rights to use, copy, modify, merge, publish,
-distribute, sublicense, and/or sell copies of the Software, and to
-permit persons to whom the Software is furnished to do so, subject to
-the following conditions:
-
-The above copyright notice and this permission notice shall be
-included in all copies or substantial portions of the Software.
-
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
-EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
-MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND
-NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE
-LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION
-OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION
-WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
-```
+Please see the LICENSE file for details.

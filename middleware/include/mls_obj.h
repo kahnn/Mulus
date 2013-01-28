@@ -5,6 +5,7 @@
 #define _MULUS_OBJ_H_
 
 #include "mls_dlink.h"
+#include "mls_evt.h"
 
 /* 
  * Class Group Code.
@@ -178,6 +179,9 @@ struct mls_eoj {
     /* Properties */
     unsigned int nprops;
     struct mls_epr *props;
+
+    /* time interval function. (tag -> mls_el_ctx) */
+    mls_evt_callback_t tinterval;
 
     /* for node */
     struct mls_node* node;

@@ -58,6 +58,18 @@ temperature_sensor_set_temp_value(unsigned char* buf, unsigned char len)
 
 /* ---------------------------------------------------------------- */
 
+static void
+_timeinterval_handler(struct mls_evt* evt, void* tag)
+{
+    /*
+      定期処理を記述する。
+      この場合、mulusのデフォルトのインターバル(MLS_EL_TIMEINTERVAL_SEC=10sec)
+      の周期で毎回、0.1C 温度が上昇する。
+     */
+    _temp_value++;
+}
+/* ---------------------------------------------------------------- */
+
 static struct mls_epr props[] = {
     /* device object super class */
     {
@@ -121,6 +133,7 @@ static struct mls_eoj temp_sensor = {
     },
     .nprops = sizeof(props)/sizeof(struct mls_epr),
     .props = props,
+    .tinterval = _timeinterval_handler,
 };
 
 struct mls_eoj*
