@@ -1,0 +1,3 @@
+device_config {-s|-g} cgc clc inc epc [value]
+  指定されたコードのオブジェクト(ノード)における内部状態を直接、取得/変更する
+  remote-host 引数が異なる以外は、el_prop と同じ。
