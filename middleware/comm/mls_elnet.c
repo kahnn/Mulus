@@ -10,8 +10,8 @@
 #include "mls_log.h"
 
 static struct mls_elnet _lelnet;
-static unsigned char _req[MLS_ELNET_PACKET_LENGTH];
-static unsigned char _res[MLS_ELNET_PACKET_LENGTH];
+static unsigned char _req[MLS_ELNET_FRAME_LENGTH_MAX];
+static unsigned char _res[MLS_ELNET_FRAME_LENGTH_MAX];
 
 /*
   @arg ifname  ex."eth0" -or- "192.168.11.131" ....
@@ -57,41 +57,6 @@ mls_elnet_term(struct mls_elnet* elnet)
 
 /* ------------------------------------------------------------- */
 
-/* XXXX struct mls_elnet_frame_base で書き換え */
-unsigned char*
-mls_elnet_set_packet_base(unsigned short tid, 
-    struct mls_eoj_code *seoj, struct mls_eoj_code *deoj,
-    unsigned char esv, unsigned char opc,
-    unsigned char *buf, unsigned int *blen)
-{
-    unsigned int len = MLS_ELNET_PACKET_BASE_LENGTH;
-
-    /* header */
-    buf[0] = MLS_ELNET_EHD1_ECHONET_LITE;
-    buf[1] = MLS_ELNET_EHD2_REGULAR;
-    len -= 2;
-    buf += 2;
-
-    /* transaction id */
-    buf += mls_type_set_short(buf, &len, (short)tid);
-
-    /* seoj */
-    buf += mls_eoj_set_eojcode(seoj, buf, &len);
-    /* deoj */
-    buf += mls_eoj_set_eojcode(deoj, buf, &len);
-
-    /* esv */
-    buf += mls_type_set_char(buf, &len, (char)esv);
-
-    /* opc */
-    buf += mls_type_set_char(buf, &len, (char)opc);
-
-    if (NULL != blen)
-        *blen -= MLS_ELNET_PACKET_BASE_LENGTH;
-
-    return buf;
-}
-
 static unsigned short
 _get_next_tid(void)
 {
@@ -109,20 +74,31 @@ _set_property(unsigned char* buf, unsigned int* len,
     buf[1] = size;
 
     *len -= (int)size;
+
     return size;
 }
 
 static int
-_check_header(unsigned char* buf, unsigned int* len)
+_check_frame_header(struct mls_elnet_frame *header, int len)
 {
-    int header_size = 2;
-    if ((MLS_ELNET_EHD1_ECHONET_LITE != buf[0]) ||
-        (MLS_ELNET_EHD2_REGULAR != buf[1]))
-    {
-        return -1;
+    int ret = 0;
+
+    if (len < MLS_ELNET_FRAME_HEADER_LENGTH) {
+        /* XXXX error log */
+        ret = -1;
+        goto out;
     }
-    *len -= header_size;
-    return header_size;
+
+    if ((MLS_ELNET_EHD1_ECHONET_LITE != header->ehd1) ||
+        (MLS_ELNET_EHD2_REGULAR != header->ehd1))
+    {
+        /* XXXX error log */
+        ret = -1;
+        goto out;
+    }
+
+out:
+    return ret;
 }
 
 /*
@@ -177,36 +153,36 @@ _select_response_esv(unsigned char req_esv, int status)
 */
 static int
 _set_properties(struct mls_el_ctx *ctx,
-    struct mls_eoj_code *seojc, struct mls_eoj_code *deojc,
-    unsigned char opc,
-    unsigned char *req, unsigned int len,
+    struct mls_elnet_frame* reqp, unsigned int reqd_len,
     unsigned char *res, unsigned int *reslen)
 {
     int ret = 0;
     struct mls_node* node;
     struct mls_eoj *eoj;
     int i;
+    unsigned char *reqd = reqp->data;
 
     node = mls_el_get_node(ctx) ;
-    eoj = mls_el_node_get_device(node, deojc);
+    eoj = mls_el_node_get_device(node, &(reqp->deoj));
     if (NULL == eoj) {
         ret = -1; /* not found deoj */
         goto out;
     }
 
-    for (i = 0; i < opc; i++) {
+    *reslen = 0;
+    for (i = 0; i < reqp->opc; i++) {
         int ret_prop;
         unsigned char epc, pdc;
         struct mls_epr* epr;
 
-        if (len < 2) {
+        if (reqd_len < 2) {
             ret = -1; /* invalid packet */
             goto out;
         }
-        epc = req[0];
-        pdc = req[1];
-        req += 2; len -= 2;
-        if (len < pdc) {
+        epc = reqd[0];
+        pdc = reqd[1];
+        reqd += 2; reqd_len -= 2;
+        if (reqd_len < pdc) {
             ret = -1; /* invalid packet */
             goto out;
         }
@@ -221,11 +197,11 @@ _set_properties(struct mls_el_ctx *ctx,
             ret_prop = -1;
             goto set_res;
         }
-        ret_prop = epr->setf(eoj, epc, req, pdc);
+        ret_prop = epr->setf(eoj, epc, reqd, pdc);
         if ((0 < ret_prop) && (epr->is_anno_when_changed)) {
             /* announce */
             mls_elnet_announce_property(mls_el_get_elnet(ctx),
-                node, deojc, epc, pdc, req);
+                node, &(reqp->deoj), epc, pdc, reqd);
         }
     set_res:
         {
@@ -234,10 +210,10 @@ _set_properties(struct mls_el_ctx *ctx,
                 res[1] = pdc;
             else
                 res[1] = 0; /* pdc */
-            res += 2; *reslen -= 2;
+            res += 2; *reslen += 2;
             if (ret_prop < 0) {
-                memcpy(res, req, pdc);
-                res += pdc; *reslen -= pdc;
+                memcpy(res, reqd, pdc);
+                res += pdc; *reslen += pdc;
             }
 
             /* EPC error. */
@@ -245,7 +221,7 @@ _set_properties(struct mls_el_ctx *ctx,
                 ret = -2;
         }
 
-        req += pdc; len -= pdc;
+        reqd += pdc; reqd_len -= pdc;
     }
 
 out:
@@ -254,37 +230,37 @@ out:
 
 static int
 _get_properties(struct mls_el_ctx *ctx,
-    struct mls_eoj_code *seojc, struct mls_eoj_code *deojc,
-    unsigned char opc,
-    unsigned char *req, unsigned int len,
+    struct mls_elnet_frame* reqp, unsigned int reqd_len,
     unsigned char *res, unsigned int *reslen)
 {
     int ret = 0;
     struct mls_node* node;
     struct mls_eoj *eoj;
     int i;
-    unsigned char tmplen = UCHAR_MAX;
-    unsigned char tmp[UCHAR_MAX];
+    unsigned char *reqd = reqp->data;
 
     node = mls_el_get_node(ctx) ;
-    eoj = mls_el_node_get_device(node, deojc);
+    eoj = mls_el_node_get_device(node, &(reqp->deoj));
     if (NULL == eoj) {
         ret = -1; /* not found deoj */
         goto out;
     }
 
-    for (i = 0; i < opc; i++) {
+    *reslen = 0;
+    for (i = 0; i < reqp->opc; i++) {
         int ret_prop;
         unsigned char epc, pdc;
         struct mls_epr* epr;
+        unsigned char tmplen = UCHAR_MAX;
+        unsigned char tmp[UCHAR_MAX];
 
-        if (len < 2) {
+        if (reqd_len < 2) {
             ret = -1; /* invalid packet */
             goto out;
         }
-        epc = req[0];
-        pdc = req[1];
-        req += 2; len -= 2;
+        epc = reqd[0];
+        pdc = reqd[1];
+        reqd += 2; reqd_len -= 2;
         if (0 != pdc) {
             ret = -1; /* invalid packet */
             goto out;
@@ -308,10 +284,10 @@ _get_properties(struct mls_el_ctx *ctx,
                 res[1] = (unsigned int)ret_prop;
             else
                 res[1] = 0; /* pdc */
-            res += 2; *reslen -= 2;
+            res += 2; *reslen += 2;
             if (0 < ret_prop) {
                 memcpy(res, tmp, ret_prop);
-                res += ret_prop; *reslen -= ret_prop;
+                res += ret_prop; *reslen += ret_prop;
             }
 
             /* EPC error. */
@@ -326,9 +302,7 @@ out:
 
 static int
 _setget_properties(struct mls_el_ctx *ctx,
-    struct mls_eoj_code *seojc, struct mls_eoj_code *deojc,
-    unsigned char opc,
-    unsigned char *req, unsigned int len,
+    struct mls_elnet_frame* req, unsigned int reqlen,
     unsigned char *res, unsigned int *reslen)
 {
     /* XXXXXX not impl */
@@ -337,35 +311,35 @@ _setget_properties(struct mls_el_ctx *ctx,
 
 static int
 _inf_properties(struct mls_el_ctx *ctx,
-    struct mls_eoj_code *seojc, struct mls_eoj_code *deojc,
-    unsigned char opc,
-    unsigned char *req, unsigned int len,
+    struct mls_elnet_frame* reqp, unsigned int reqd_len,
     unsigned char *res, unsigned int *reslen)
 {
     int ret = 0;
     struct mls_node* node;
     struct mls_eoj *eoj;
     int i;
+    unsigned char *reqd = reqp->data;
 
     node = mls_el_get_node(ctx) ;
-    eoj = mls_el_node_get_device(node, deojc);
+    eoj = mls_el_node_get_device(node, &(reqp->deoj));
     if (NULL == eoj) {
-        ret = -1; /* not found deoj */
+        ret = -1; /* not found deoj XXXX */
         goto out;
     }
 
-    for (i = 0; i < opc; i++) {
+    *reslen = 0;
+    for (i = 0; i < reqp->opc; i++) {
         unsigned char epc, pdc;
 
-        if (len < 2) {
-            ret = -1; /* invalid packet */
+        if (reqd_len < 2) {
+            ret = -1; /* invalid packet XXXX */
             goto out;
         }
-        epc = req[0];
-        pdc = req[1];
-        req += 2; len -= 2;
-        if (len < pdc) {
-            ret = -1; /* invalid packet */
+        epc = reqd[0];
+        pdc = reqd[1];
+        reqd += 2; reqd_len -= 2;
+        if (reqd_len < pdc) {
+            ret = -1; /* invalid packet XXXX */
             goto out;
         }
 
@@ -376,10 +350,10 @@ _inf_properties(struct mls_el_ctx *ctx,
         {
             res[0] = epc;
             res[1] = 0; /* pdc */
-            res += 2; *reslen -= 2;
+            res += 2; *reslen += 2;
         }
 
-        req += pdc; len -= pdc;
+        reqd += pdc; reqd_len -= pdc;
     }
 
 out:
@@ -393,50 +367,22 @@ out:
  */
 static int
 _handle_message(struct mls_el_ctx *ctx,
-    unsigned char* req, unsigned int len, 
-    unsigned char* res, unsigned int *reslen)
+    unsigned char* _req, unsigned int _reqlen, 
+    unsigned char* _res, unsigned int *_reslen)
 {
     int ret = 0;
-    unsigned short tid;
-    struct mls_eoj_code seoj, deoj;
-    unsigned char esv, opc;
-    unsigned char* org_res = res;
-    unsigned int org_reslen = *reslen;
+    struct mls_elnet_frame *req = (struct mls_elnet_frame*)_req;
+    int reqd_len = _reqlen - MLS_ELNET_FRAME_HEADER_LENGTH;
+    struct mls_elnet_frame *res = (struct mls_elnet_frame*)_res;
+    unsigned int resd_len;
 
-    /* check length */
-    if (len < MLS_ELNET_PACKET_BASE_LENGTH) {
-        /* ignore message XXXX error log */
-        ret = -1;
-        goto out;
-    }
-
-    /* XXXX struct mls_elnet_frame_base で書き換え */
-    /* header */
-    ret = _check_header(req, &len);
+    ret = _check_frame_header(req, _reqlen);
     if (ret < 0) {
-        /* ignore message XXXX error log */
-        ret = -1;
+        /* ignore message */
         goto out;
     }
-    req += ret;
 
-    /* transaction id */
-    tid = mls_type_get_short(req, len);
-    /* seoj */
-    req += mls_eoj_get_eojcode(&seoj, req, &len);
-    /* deoj */
-    req += mls_eoj_get_eojcode(&deoj, req, &len);
-    /* esv */
-    esv = (unsigned char)mls_type_get_char(req, len);
-    req += 1;
-    /* opc */
-    opc = (unsigned char)mls_type_get_char(req, len);
-    req += 1;
-
-    /* *********************************************** */
-    res += MLS_ELNET_PACKET_BASE_LENGTH;
-    *reslen -= MLS_ELNET_PACKET_BASE_LENGTH;
-    switch(esv) {
+    switch(req->esv) {
     default:
         /* ignore message XXXX error log */
         ret = -1;
@@ -445,14 +391,14 @@ _handle_message(struct mls_el_ctx *ctx,
     /* Request(0x6X) */
     case MLS_ELNET_ESV_SetI:
     case MLS_ELNET_ESV_SetC:
-        ret = _set_properties(ctx, &seoj, &deoj, opc, req, len, res, reslen);
+        ret = _set_properties(ctx, req, reqd_len, res->data, &resd_len);
         break;
     case MLS_ELNET_ESV_Get:
     case MLS_ELNET_ESV_INF_REQ:
-        ret = _get_properties(ctx, &seoj, &deoj, opc, req, len, res, reslen);
+        ret = _get_properties(ctx, req, reqd_len, res->data, &resd_len);
         break;
     case MLS_ELNET_ESV_SetGet:
-        ret = _setget_properties(ctx, &seoj, &deoj, opc, req, len, res, reslen);
+        ret = _setget_properties(ctx, req, reqd_len, res->data, &resd_len);
         break;
 
     /* Response(0x7X) */
@@ -465,7 +411,7 @@ _handle_message(struct mls_el_ctx *ctx,
         ret = -1;
         break;
     case MLS_ELNET_ESV_INFC: /* spontaneous */
-        ret = _inf_properties(ctx, &seoj, &deoj, opc, req, len, res, reslen);
+        ret = _inf_properties(ctx, req, reqd_len, res->data, &resd_len);
         break;
 
     /* Error Response(0x5X) */
@@ -490,16 +436,20 @@ _handle_message(struct mls_el_ctx *ctx,
         goto out;
     }
     /* don't need response message */
-    if ((MLS_ELNET_ESV_SetI == esv) && (ret == 0)) {
+    if ((MLS_ELNET_ESV_SetI == req->esv) && (ret == 0)) {
         ret = -1;
         goto out;
     }
     /* set packet */
-    esv = _select_response_esv(esv, ret);
-    mls_elnet_set_packet_base(tid, &deoj, &seoj, esv, opc, org_res, NULL);
-    *reslen = org_reslen - *reslen;
-    ret = 0; /* ok, send message -- when ret is -2 */
+    {
+        unsigned char res_esv = _select_response_esv(req->esv, ret);
+        mls_elnet_setup_frame_header(res, 
+            &(req->deoj), &(req->seoj), res_esv, req->opc, 0);
+        res->tid = req->tid; /* set request-tid */
+        *_reslen = MLS_ELNET_FRAME_HEADER_LENGTH + resd_len;
 
+        ret = 0; /* ok, send message -- when ret is 0 -or- -2 */
+    }
 out:
     return ret;
 }
@@ -514,20 +464,19 @@ mls_elnet_announce_property(struct mls_elnet *elnet,
     struct mls_node* node, struct mls_eoj_code *deojc,
     unsigned char epc, unsigned char pdc, unsigned char *data)
 {
-    unsigned int tmplen = UCHAR_MAX;
-    unsigned char tmp[UCHAR_MAX];
-    unsigned char *buf = tmp;
-    buf = mls_elnet_set_packet_base(_get_next_tid(),
-        deojc, &(node->prof->code),
-        MLS_ELNET_ESV_INF, 1, buf, &tmplen);
-    buf[0] = epc;
-    buf[1] = pdc;
-    memcpy(&(buf[2]), data, pdc);
-    buf += (2 + pdc);
+    unsigned char tmp[MLS_ELNET_FRAME_HEADER_LENGTH + 2 + UCHAR_MAX];
+    struct mls_elnet_frame *req = (struct mls_elnet_frame*)tmp;
+    int reqlen = MLS_ELNET_FRAME_HEADER_LENGTH + 2 + pdc;
+
+    mls_elnet_setup_frame_header(req, 
+        deojc, &(node->prof->code), MLS_ELNET_ESV_INF, 1, 1);
+    req->data[0] = epc;
+    req->data[1] = pdc;
+    memcpy(&(req->data[2]), data, pdc);
 
     {
         int ret;
-        ret = sendto(elnet->srv->sock, tmp, (buf - tmp), 0,
+        ret = sendto(elnet->srv->sock, tmp, reqlen, 0,
             (struct sockaddr*)&(elnet->srv->to), elnet->srv->tolen);
         if (-1 == ret) {
             /* XXXX error log */
@@ -543,22 +492,21 @@ void
 mls_elnet_announce_profile(struct mls_elnet *elnet, struct mls_node *node)
 {
     struct mls_eoj* profile = node->prof;
-    unsigned char* buf = _req;
-    unsigned int len = MLS_ELNET_PACKET_LENGTH;
+    struct mls_elnet_frame *req = (struct mls_elnet_frame*)_req;
+    unsigned int reqlen = sizeof(_req), proplen = sizeof(_req);
 
     /* packet base */
-    buf =
-        mls_elnet_set_packet_base(_get_next_tid(),
-            &(profile->code), &(profile->code),
-            MLS_ELNET_ESV_INF, 1, buf, &len);
+    mls_elnet_setup_frame_header(req, 
+        &(profile->code), &(profile->code), MLS_ELNET_ESV_INF, 1, 1);
     /* property */
-    buf += _set_property(buf, &len, 
+    proplen = _set_property(req->data, &proplen, 
         profile, 
         mls_eoj_get_property(profile, MLS_EL_EPC_INSTANCE_LIST_NOTIFICATION));
+    reqlen = MLS_ELNET_FRAME_HEADER_LENGTH + 2 + proplen;
 
     {
         int ret;
-        ret = sendto(elnet->srv->sock, buf, (buf - _req), 0,
+        ret = sendto(elnet->srv->sock, (char *)req, reqlen, 0,
             (struct sockaddr*)&(elnet->srv->to), elnet->srv->tolen);
         if (-1 == ret) {
             /* XXXX error log */
@@ -580,9 +528,9 @@ mls_elnet_event_handler(struct mls_evt* evt, void* tag)
     struct mls_elnet *elnet = mls_el_get_elnet(ctx);
     int sock = elnet->srv->sock;
     unsigned char* req = _req;
-    unsigned int len = MLS_ELNET_PACKET_LENGTH;
+    unsigned int len = sizeof(_req);
     unsigned char* res = _res;
-    unsigned int reslen = MLS_ELNET_PACKET_LENGTH;
+    unsigned int reslen = sizeof(_res);
 
     /* Request */
     fromlen = sizeof(from);
@@ -632,4 +580,161 @@ mls_elnet_event_handler(struct mls_evt* evt, void* tag)
         perror("sendto");
         return;
     }
+}
+
+static int
+_unmarshal_frame_response(struct mls_elnet_frame *req,
+    struct mls_elnet_frame *res, int reslen)
+{
+    int ret = 0;
+
+    /* check header */
+    ret = _check_frame_header(res, reslen);
+    if (ret < 0) {
+        goto out;
+    }
+
+    /* check tid */
+#if 0
+    res->tid = mls_type_get_short(&(res->tid), 2);
+#endif
+    if (req->tid != res->tid) {
+        /* XXXX error log */
+        ret = -1;
+        goto out;
+    }
+
+    /* check seoj & deoj */
+    if (!mls_eoj_equal_eojc(&(req->seoj), &(res->deoj)) ||
+        !mls_eoj_equal_eojc(&(req->deoj), &(res->seoj)))
+    {
+        /* XXXX error log */
+        ret = -1;
+        goto out;
+    }
+
+    /* check esv */
+    if ((req->esv & 0xF) != (res->esv & 0xF)) {
+        /* XXXX error log */
+        ret = -1;
+        goto out;
+    }
+    
+    /* check opc */
+    if (req->opc != res->opc) {
+        /* XXXX error log */
+        ret = -1;
+        goto out;
+    }
+
+out:
+    return ret;
+}
+
+void
+mls_elnet_setup_frame_header(struct mls_elnet_frame *req, 
+    struct mls_eoj_code *seoj, struct mls_eoj_code *deoj,
+    unsigned char esv, unsigned char opc, int set_auto_tid)
+{
+    req->ehd1 = MLS_ELNET_EHD1_ECHONET_LITE;
+    req->ehd2 = MLS_ELNET_EHD2_REGULAR;
+    req->tid = (set_auto_tid ? _get_next_tid() : 0);
+    req->seoj = *seoj;
+    req->deoj = *deoj;
+    req->esv = esv;
+    req->opc = opc;
+}
+
+int
+mls_elnet_rpc(struct mls_net_mcast_cln *cln, char *addr, char *port,
+    struct mls_elnet_frame *req, int reqlen,
+    struct mls_elnet_frame *res, int reslen)
+{
+    int ret = 0;
+    int sock = cln->sock;
+    struct sockaddr_storage to, *top;
+    socklen_t tolen;
+    fd_set mask;
+    int width;
+    int i, retry = 3, wait_sec = 2;
+
+    if (NULL != addr) {
+        if ((ret = mls_net_get_sockaddr_info(addr, port, &to, &tolen)) < 0) {
+            fprintf(stderr, "mls_net_get_sockaddr_info:%s\n", strerror(errno));
+            goto out;
+        }
+        top = &to;
+    } else {
+        top = &(cln->to);
+        tolen = cln->tolen;
+    }
+
+    FD_ZERO(&mask);
+    FD_SET(sock, &mask);
+    width = sock + 1;
+
+    for (i = 0; i < retry; i++) {
+        fd_set ready;
+        struct timeval timeout;
+
+        /* send request */
+        ret = sendto(sock, (char*)req, reqlen, 0,
+            (struct sockaddr*)&top, tolen);
+        if (-1 == ret) {
+            /* XXXX error log */
+            ret = -errno;
+            perror("sendto");
+            goto out;
+        }
+
+        ready = mask;
+        timeout.tv_sec = wait_sec;
+        timeout.tv_usec = 0;
+
+        switch (select(width, (fd_set*)&ready, NULL, NULL, &timeout)) {
+        case -1:
+            ret = -errno;
+            perror("select");
+            goto out;
+        case 0:
+            /* timeout, retry */
+            break;
+
+        default:
+            if (FD_ISSET(sock, &ready)) {
+                ssize_t len;
+
+                /* recv response */
+                cln->fromlen = sizeof(cln->from);
+                if ((len = recvfrom(sock, res, reslen, 0,
+                            (struct sockaddr*)&(cln->from),
+                            &(cln->fromlen))) == -1)
+                {
+                    /* XXXX error log */
+                    ret = -errno;
+                    perror("recvfrom");
+                    goto out;
+                }
+
+                /* un-marshal response */
+                ret = _unmarshal_frame_response(req, res, len);
+                if (ret < 0) {
+                    /* ignore message retry, XXXX error log */
+                    i--;
+                    continue;
+                }
+
+                /* OK, response packet */
+                ret = len;
+                goto out;
+            }
+            break;
+        }
+    }
+
+    /* retry over */
+    ret = -1;
+
+out:
+    return ret;
 }

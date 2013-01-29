@@ -39,13 +39,6 @@
 /*
  * frame.
  */
-#define MLS_ELNET_EHD1_ECHONET_LITE ((unsigned char)0x10)
-#define MLS_ELNET_EHD2_REGULAR ((unsigned char)0x81)
-
-#define MLS_ELNET_PACKET_LENGTH (32*1024)
-/* EHD1(1) + EHD2(1) + TID(2) + SEOJ(3) + DEOJ(3) + ESV(1) + OPC(1) */
-#define MLS_ELNET_PACKET_BASE_LENGTH (1 + 1 + 2 + 3 + 3 + 1 + 1)
-
 struct mls_elnet_frame {
     unsigned char ehd1;
     unsigned char ehd2;
@@ -56,6 +49,13 @@ struct mls_elnet_frame {
     unsigned char opc;
     unsigned char data[];
 };
+/* EHD1(1) + EHD2(1) + TID(2) + SEOJ(3) + DEOJ(3) + ESV(1) + OPC(1) */
+#define MLS_ELNET_FRAME_HEADER_LENGTH sizeof(struct mls_elnet_frame)
+
+#define MLS_ELNET_EHD1_ECHONET_LITE ((unsigned char)0x10)
+#define MLS_ELNET_EHD2_REGULAR ((unsigned char)0x81)
+
+#define MLS_ELNET_FRAME_LENGTH_MAX (32*1024)
 
 /*
  * Context.
@@ -67,12 +67,16 @@ struct mls_elnet {
 extern struct mls_elnet *mls_elnet_init(char *ifname);
 extern void mls_elnet_term(struct mls_elnet*);
 extern void mls_elnet_event_handler(struct mls_evt*, void*);
+
 extern void mls_elnet_announce_profile(struct mls_elnet*,struct mls_node*);
 extern void mls_elnet_announce_property(struct mls_elnet*,struct mls_node*,struct mls_eoj_code*, unsigned char epc, unsigned char pdc, unsigned char *data);
 
-extern unsigned char* mls_elnet_set_packet_base(unsigned short tid,
+extern int mls_elnet_rpc(struct mls_net_mcast_cln*, char *addr, char *port,
+    struct mls_elnet_frame *req, int reqlen,
+    struct mls_elnet_frame *res, int reslen);
+
+extern void mls_elnet_setup_frame_header(struct mls_elnet_frame *req, 
     struct mls_eoj_code *seoj, struct mls_eoj_code *deoj,
-    unsigned char esv, unsigned char opc,
-    unsigned char *buf, unsigned int *blen);
+    unsigned char esv, unsigned char opc, int set_auto_tid);
 
 #endif /* _MULUS_ELNET_H_ */

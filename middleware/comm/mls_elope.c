@@ -142,7 +142,7 @@ _set_properties(struct mls_el_ctx *ctx, struct mls_elope_packet *req)
         rc = MLS_ELOPE_RCODE_NOENT_EPC; /* not found property */
         goto out;
     }
-    if ((!(epr->access_attr & MLS_EPR_ACCESS_SET)) || (NULL == epr->setf)) {
+    if (NULL == epr->setf) {
         rc = MLS_ELOPE_RCODE_NOENT_METHOD; /* not found method */
         goto out;
     }
@@ -184,7 +184,7 @@ _get_properties(struct mls_el_ctx *ctx,
         rc = MLS_ELOPE_RCODE_NOENT_EPC; /* not found property */
         goto out;
     }
-    if ((!(epr->access_attr & MLS_EPR_ACCESS_GET)) || (NULL == epr->getf)) {
+    if (NULL == epr->getf) {
         rc = MLS_ELOPE_RCODE_NOENT_METHOD; /* not found method */
         goto out;
     }
@@ -193,6 +193,7 @@ _get_properties(struct mls_el_ctx *ctx,
         rc = MLS_ELOPE_RCODE_INVALID_DATA;
         goto out;
     }
+    *pdc = (unsigned char)ret_prop;
 
 out:
     return rc;

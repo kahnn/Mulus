@@ -13,6 +13,8 @@
 /**********************************************************************/
 struct mls_eoj_code _cond_code;
 struct mls_net_mcast_cln* _cln_ctx = NULL;
+static unsigned char _req[MLS_ELNET_FRAME_LENGTH_MAX];
+static unsigned char _res[MLS_ELNET_FRAME_LENGTH_MAX];
 /**********************************************************************/
 
 void
@@ -116,157 +118,63 @@ out:
     return ret;
 }
 
-static unsigned char _req[MLS_ELNET_PACKET_LENGTH];
-static unsigned char _res[MLS_ELNET_PACKET_LENGTH];
-
 static int
 command(void)
 {
-    int ret = 0;
-    struct mls_eoj_code eoj;
-    unsigned char esv;
-    unsigned short tid = 1192;
-
-    unsigned char *req = _req;
+    int ret = 0, rpc_reslen;
+    struct mls_elnet_frame *req = (struct mls_elnet_frame*)_req;
     unsigned int reqlen = sizeof(_req);
-    int i, retry = 3, wait_sec = 2;
+    struct mls_elnet_frame *res = (struct mls_elnet_frame*)_res;
+    unsigned int reslen = sizeof(_res);
 
     /* create request */
-    eoj.cgc = MLS_EL_CGC_PROFILE;
-    eoj.clc = MLS_EL_CLC_NODEPROFILE;
-    eoj.inc = 0x01;
-    esv = MLS_ELNET_ESV_INF_REQ;
+    {
+        struct mls_eoj_code eoj;
+        eoj.cgc = MLS_EL_CGC_PROFILE;
+        eoj.clc = MLS_EL_CLC_NODEPROFILE;
+        eoj.inc = 0x01;
 
-    req = mls_elnet_set_packet_base(tid, &eoj, &eoj, esv, 1, req, &reqlen);
-    req[0] = MLS_EL_EPC_INSTANCE_LIST_NOTIFICATION;
-    req[1] = 0;
-    req += 2;
+        mls_elnet_setup_frame_header(req,
+            &eoj, &eoj, 
+            MLS_ELNET_ESV_INF_REQ,
+            1, 1);
+        req->data[0] = MLS_EL_EPC_INSTANCE_LIST_NOTIFICATION;
+        req->data[1] = 0;
+        reqlen = MLS_ELNET_FRAME_HEADER_LENGTH + 2 + req->data[1];
+    }
 
-    for (i = 0; i < retry; i++) {
-        fd_set mask, ready;
-        int width;
-        struct timeval timeout;
+    /* RPC */
+rpc_exec:
+    rpc_reslen = mls_elnet_rpc(_cln_ctx, NULL, NULL, req, reqlen, res, reslen);
+    if (rpc_reslen < 0) {
+        /* XXXX error */
+        ret = -1;
+        goto out;
+    }
 
-        /* send request */
-        ret = sendto(_cln_ctx->sock, _req, (req - _req), 0,
-            (struct sockaddr*)&(_cln_ctx->to), _cln_ctx->tolen);
-        if (-1 == ret) {
-            /* XXXX error log */
-            perror("sendto");
-            goto out;
-        }
+    /* epc */
+    if (MLS_EL_EPC_INSTANCE_LIST_NOTIFICATION != res->data[0]) {
+        /* ignore message retry, XXXX error log */
+        goto rpc_exec;
+    }
+    /* pdc */
+    if (res->data[1] == 0) {
+        /* ignore message retry, XXXX error log */
+        goto rpc_exec;
+    }
 
-        FD_ZERO(&mask);
-        FD_SET(_cln_ctx->sock, &mask);
-        width = _cln_ctx->sock + 1;
-        ready = mask;
-        timeout.tv_sec = wait_sec;
-        timeout.tv_usec = 0;
-
-        switch (select(width, (fd_set*)&ready, NULL, NULL, &timeout)) {
-        case -1:
-            perror("select");
-            goto out;
-        case 0:
-            /* timeout, retry */
-            break;
-        default:
-            if (FD_ISSET(_cln_ctx->sock, &ready)) {
-                struct sockaddr_storage from;
-                socklen_t fromlen;
-                unsigned char *res = _res;
-                unsigned short res_tid;
-                unsigned char res_esv, res_opc, res_epc, res_pdc;
-                unsigned char *res_datap, res_datalen;
-
-                /* recv response */
-                fromlen = sizeof(from);
-                if ((ret = recvfrom(_cln_ctx->sock, res, sizeof(_res), 0,
-                            (struct sockaddr*)&from, &fromlen)) == -1)
-                {
-                    /* XXXX error log */
-                    perror("recvfrom");
-                    goto out;
-                }
-
-                /*
-                 * parse response
-                 */
-                /* XXXX mls_elnet での受信処理と合わせて整理する */
-                if (ret < MLS_ELNET_PACKET_BASE_LENGTH) {
-                    /* ignore message retry, XXXX error log */
-                    i--;
-                    continue;
-                }
-                /* skip header */
-                res += 2;
-                /* transaction id */
-                res_tid = mls_type_get_short(res, 2);
-                res += 2;
-                if (tid != res_tid) {
-                    /* ignore message retry, XXXX error log */
-                    i--;
-                    continue;
-                }
-                /* skip eoj*2 */
-                /* XXX check seoj */
-                res += 6;
-                /* esv */
-                res_esv = (unsigned char)mls_type_get_char(res, 1);
-                res += 1;
-                if (MLS_ELNET_ESV_INF != res_esv) {
-                    /* ignore message retry, XXXX error log */
-                    i--;
-                    continue;
-                }
-                /* opc */
-                res_opc = (unsigned char)mls_type_get_char(res, 1);
-                res += 1;
-                if (1 != res_opc) {
-                    /* ignore message retry, XXXX error log */
-                    i--;
-                    continue;
-                }
-                /* epc */
-                res_epc = (unsigned char)mls_type_get_char(res, 1);
-                res += 1;
-                if (MLS_EL_EPC_INSTANCE_LIST_NOTIFICATION != res_epc) {
-                    /* ignore message retry, XXXX error log */
-                    i--;
-                    continue;
-                }
-                /* pdc */
-                res_pdc = (unsigned char)mls_type_get_char(res, 1);
-                res += 1;
-                if (res_pdc == 0) {
-                    /* ignore message retry, XXXX error log */
-                    i--;
-                    continue;
-                }
-                /* edt */
-                res_datap = res;
-                res_datalen = res_pdc;
-
-                /*
-                 * OK! response valid packet.
-                 */
-                /* check result */
-                {
-                    ret = find_and_print_eoj(&from, fromlen,
-                        res_datap, res_datalen, &_cond_code);
-                    if (ret != 0) {
-                        /* ignore message retry, XXXX error log */
-                        i--;
-                        continue;
-                    }
-                    ret = 0;
-                    goto out;
-                }
-            }
-            break;
+    /*
+     * OK! response valid packet.
+     */
+    /* check result */
+    {
+        ret = find_and_print_eoj(&(_cln_ctx->from), _cln_ctx->fromlen,
+            &(res->data[2]), res->data[1], &_cond_code);
+        if (ret != 0) {
+            /* ignore message retry, XXXX error log */
+            goto rpc_exec;
         }
     }
-    ret = -1;
 
 out:
     return ret;

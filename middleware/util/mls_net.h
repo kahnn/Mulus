@@ -26,6 +26,8 @@ struct mls_net_mcast_cln {
     int sock;
     struct sockaddr_storage to;
     socklen_t tolen;
+    struct sockaddr_storage from;
+    socklen_t fromlen;
     char maddr[MLS_NET_LEN_ADDR];
     char mport[MLS_NET_LEN_PORT];
     char ifaddr[MLS_NET_LEN_ADDR];

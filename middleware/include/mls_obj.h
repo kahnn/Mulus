@@ -160,8 +160,19 @@ struct mls_epr {
     /* when property changed, announce. */
     int is_anno_when_changed;
 };
+/* 
+ * Property Map.
+ */
+#define MLS_EL_PROPERTY_MAP_BORDER  (16)
 
 struct mls_node;
+
+extern int mls_eoj_get_num_properties(struct mls_eoj*, int access);
+extern int mls_eoj_get_num_properties_in_node(struct mls_node*, int access);
+extern int mls_eoj_get_property_map(struct mls_eoj*, int access,
+    int pnum, unsigned char* buf);
+extern int mls_eoj_get_property_map_in_node(struct mls_node*, int access,
+    int pnum, unsigned char* buf);
 
 /*
  * ECHONET Lite Object
@@ -171,6 +182,8 @@ struct mls_eoj_code {
     unsigned char clc; /* class code */
     unsigned char inc; /* instance code */
 };
+#define mls_eoj_equal_eojc(a,b) \
+    (((a)->cgc == (b)->cgc) && ((a)->clc == (b)->clc) && ((a)->inc == (b)->inc))
 
 struct mls_eoj {
     /* Object Code */
@@ -191,6 +204,7 @@ struct mls_eoj {
 /* ---------------------------------------------------------------- */
 
 extern struct mls_epr* mls_eoj_get_property(struct mls_eoj*, unsigned char);
+extern int mls_eoj_set_eojclass(struct mls_eoj_code*, unsigned char*, unsigned int*);
 extern int mls_eoj_set_eojcode(struct mls_eoj_code*, unsigned char*, unsigned int*);
 extern int mls_eoj_get_eojcode(struct mls_eoj_code*, unsigned char*, unsigned int*);
 

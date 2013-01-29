@@ -49,6 +49,7 @@ parse_rawdata(char *data, unsigned char *rawdata, unsigned char* rawdata_len)
     for (i = 0, str = data; i < len; i += 2, str += 2) {
         token[0] = str[0];
         token[1] = str[1];
+        token[2] = '\0';
 
         *rawdata = (unsigned char)strtoul(token, NULL, 16);
 

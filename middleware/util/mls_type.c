@@ -65,3 +65,72 @@ mls_type_get_int(unsigned char* buf, unsigned int len)
     dst |= (int)(buf[3]         & 0x000000ff);
     return dst;
 }
+
+/* --------------------------------------------------------------- */
+
+#if 0 /* XXX TBD */
+
+int
+mls_type_bbuf_setup(struct mls_type_bbuf **bbuf, unsigned char *buf, int buflen)
+{
+    int ret = 0;
+    int allocated = 0;
+
+    if (NULL == bbuf) {
+        if ((*bbuf = malloc(sizeof(struct mls_type_bbuf))) == NULL) {
+            ret = -errno;
+            goto out;
+        }
+        allocated |= MLS_TYPE_BBUF_CONTEXT_ALLOCATED;
+    }
+    memset(*bbuf, 0 sizeof(struct mls_type_bbuf));
+
+    if (NULL == buf) {
+        if ((buf = malloc(buflen)) == NULL) {
+            ret = -errno;
+            goto out;
+        }
+        allocated |= MLS_TYPE_BBUF_BUFFER_ALLOCATED;
+    }
+
+    (*bbuf)->buf = buf;
+    (*bbuf)->buflen = buflen;
+    (*bbuf)->is_allocated = allocated;
+    (*bbuf)->head = buf;
+    (*bbuf)->tail = buf;
+    (*bbuf)->restlen = buflen;
+
+out:
+    if (0 != ret) {
+        if (allocated & MLS_TYPE_BBUF_BUFFER_ALLOCATED)
+            free(buf);
+        if (allocated & MLS_TYPE_BBUF_CONTEXT_ALLOCATED)
+            free(*bbuf);
+    }
+    return ret;
+}
+
+void
+mls_type_bbuf_teardown(struct mls_type_bbuf *bbuf)
+{
+    if ((bbuf->is_allocated) & MLS_TYPE_BBUF_BUFFER_ALLOCATED) {
+        free(bbuf->buf);
+    }
+    if ((bbuf->is_allocated) & MLS_TYPE_BBUF_CONTEXT_ALLOCATED) {
+        free(bbuf);
+    } else {
+        memset(bbuf, 0 sizeof(*bbuf));
+    }
+}
+
+int mls_type_bbuf_pull_char(struct mls_type_bbuf *bbuf, unsigned char *data);
+int mls_type_bbuf_pull_short(struct mls_type_bbuf *bbuf, unsigned short *data);
+int mls_type_bbuf_pull_int(struct mls_type_bbuf *bbuf, unsigned int *data);
+
+int mls_type_bbuf_push_char(struct mls_type_bbuf *bbuf, unsigned char data);
+int mls_type_bbuf_push_short(struct mls_type_bbuf *bbuf, unsigned short data);
+int mls_type_bbuf_push_int(struct mls_type_bbuf *bbuf, unsigned int data);
+
+int mls_type_bbuf_seek(struct mls_type_bbuf *bbuf, unsigned int pos);
+int mls_type_bbuf_reset(struct mls_type_bbuf *bbuf);
+#endif /* XXX TBD */

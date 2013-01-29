@@ -4,8 +4,8 @@ el_prop  {-s|-g} remote-host cg cc ic epc [value]
 -gの場合は valueは不要
 remote-host = ipaddr:port
 
--g の際の出力フォーマット: ('|'でbyte単位で区切る)
-0x82,0x00|0x00|0x42
+-g の際の出力フォーマット: (epc,edata)
+0x82,000042
 
 ...
  */
@@ -29,6 +29,10 @@ unsigned char _epc_rawdata[UCHAR_MAX];
 unsigned char _epc_rawdata_len;
 
 struct mls_net_mcast_cln* _cln_ctx = NULL;
+
+static unsigned char _req[MLS_ELNET_FRAME_LENGTH_MAX];
+static unsigned char _res[MLS_ELNET_FRAME_LENGTH_MAX];
+
 /**********************************************************************/
 
 void
@@ -43,12 +47,13 @@ parse_rawdata(char *data, unsigned char *rawdata, unsigned char* rawdata_len)
 {
     int i, len = strlen(data);
     char *str = data;
-    char token[2];
+    char token[2+1];
 
     *rawdata_len = 0;
     for (i = 0, str = data; i < len; i += 2, str += 2) {
         token[0] = str[0];
         token[1] = str[1];
+        token[2] = '\0';
 
         *rawdata = (unsigned char)strtoul(token, NULL, 16);
 
@@ -139,21 +144,16 @@ out:
 }
 
 static int
-parse_addr(char *host, struct sockaddr_storage *to, socklen_t *tolen)
+parse_addr(char *host, char **addr, char **port)
 {
     int ret = 0;
-    char *addr, *port, *saveptr;
+    char *saveptr;
 
-    addr = strtok_r(host, ":", &saveptr);
-    port = strtok_r(NULL, ":", &saveptr);
-    if (NULL == addr || NULL == port) {
+    *addr = strtok_r(host, ":", &saveptr);
+    *port = strtok_r(NULL, ":", &saveptr);
+    if (NULL == *addr || NULL == *port) {
         fprintf(stderr, "inavlid host format:%s\n", host);
         ret = -1;
-        goto out;
-    }
-
-    if ((ret = mls_net_get_sockaddr_info(addr, port, to, tolen)) < 0) {
-        fprintf(stderr, "mls_net_get_sockaddr_info():%s\n", strerror(errno));
         goto out;
     }
 
@@ -161,177 +161,59 @@ out:
     return ret;
 }
 
-static unsigned char _req[MLS_ELNET_PACKET_LENGTH];
-static unsigned char _res[MLS_ELNET_PACKET_LENGTH];
-
 static int
 command(void)
 {
     int ret = 0;
-    struct mls_eoj_code seoj, deoj;
-    unsigned char esv;
-    unsigned short tid = 5963;
-
-    struct sockaddr_storage to;
-    socklen_t tolen;
-    unsigned char *req = _req;
+    char *addr, *port;
+    struct mls_elnet_frame *req = (struct mls_elnet_frame*)_req;
     unsigned int reqlen = sizeof(_req);
-    unsigned char *res_datap, res_datalen;
-    int i, retry = 3, wait_sec = 2;
+    struct mls_elnet_frame *res = (struct mls_elnet_frame*)_res;
+    unsigned int reslen = sizeof(_res);
 
-    if (parse_addr(_remote_host, &to, &tolen) < 0) {
-        fprintf(stderr, "mls_net_get_sockaddr_info():%s\n", strerror(errno));
+    /* target host */
+    if (parse_addr(_remote_host, &addr, &port) < 0) {
         ret = -1;
         goto out;
     }
 
     /* create request */
-    seoj.cgc = MLS_EL_CGC_PROFILE;
-    seoj.clc = MLS_EL_CLC_NODEPROFILE;
-    seoj.inc = 0x01;
-    deoj = _eoj_code;
-    esv = (_run_mode) ? MLS_ELNET_ESV_SetC : MLS_ELNET_ESV_Get;
+    {
+        struct mls_eoj_code seoj, deoj;
+        seoj.cgc = MLS_EL_CGC_PROFILE;
+        seoj.clc = MLS_EL_CLC_NODEPROFILE;
+        seoj.inc = 0x01;
+        deoj = _eoj_code;
 
-    req = mls_elnet_set_packet_base(tid, 
-        &seoj, &deoj, esv,
-        1, /* XXXX OPC: GETでどうしよう？ 最大数を指定する？ */
-        req, &reqlen);
-    req[0] = _epc;
-    if (_run_mode) {
-        req[1] = _epc_rawdata_len;
-        memcpy(&(req[2]), _epc_rawdata, _epc_rawdata_len);
-        req += (2 + _epc_rawdata_len);
-    } else {
-        req[1] = 0;
-        req += 2;
+        mls_elnet_setup_frame_header(req,
+            &seoj, &deoj, 
+            ((_run_mode) ? MLS_ELNET_ESV_SetC : MLS_ELNET_ESV_Get),
+            1, 1);
+        req->data[0] = _epc;
+        if (_run_mode) {
+            req->data[1] = _epc_rawdata_len;
+            memcpy(&(req->data[2]), _epc_rawdata, _epc_rawdata_len);
+        } else {
+            req->data[1] = 0;
+        }
+        reqlen = MLS_ELNET_FRAME_HEADER_LENGTH + 2 + req->data[1];
     }
 
-    for (i = 0; i < retry; i++) {
-        fd_set mask, ready;
-        int width;
-        struct timeval timeout;
-
-        /* send request */
-        ret = sendto(_cln_ctx->sock, _req, (req - _req), 0,
-            (struct sockaddr*)&to, tolen);
-        if (-1 == ret) {
-            /* XXXX error log */
-            perror("sendto");
-            goto out;
-        }
-
-        FD_ZERO(&mask);
-        FD_SET(_cln_ctx->sock, &mask);
-        width = _cln_ctx->sock + 1;
-        ready = mask;
-        timeout.tv_sec = wait_sec;
-        timeout.tv_usec = 0;
-
-        switch (select(width, (fd_set*)&ready, NULL, NULL, &timeout)) {
-        case -1:
-            perror("select");
-            goto out;
-        case 0:
-            /* timeout, retry */
-            break;
-        default:
-            if (FD_ISSET(_cln_ctx->sock, &ready)) {
-                struct sockaddr_storage from;
-                socklen_t fromlen;
-                unsigned char *res = _res;
-                unsigned short res_tid;
-                unsigned char res_esv, res_opc, res_epc, res_pdc;
-
-                /* recv response */
-                fromlen = sizeof(from);
-                if ((ret = recvfrom(_cln_ctx->sock, res, sizeof(_res), 0,
-                            (struct sockaddr*)&from, &fromlen)) == -1)
-                {
-                    /* XXXX error log */
-                    perror("recvfrom");
-                    goto out;
-                }
-
-                /*
-                 * parse response
-                 */
-                /* XXXX mls_elnet での受信処理と合わせて整理する */
-                if (ret < MLS_ELNET_PACKET_BASE_LENGTH) {
-                    /* ignore message retry, XXXX error log */
-                    i--;
-                    continue;
-                }
-                /* skip header */
-                res += 2;
-                /* transaction id */
-                res_tid = mls_type_get_short(res, 2);
-                res += 2;
-                if (tid != res_tid) {
-                    /* ignore message retry, XXXX error log */
-                    i--;
-                    continue;
-                }
-                /* skip eoj*2 */
-                /* XXX check seoj */
-                res += 6;
-                /* esv */
-                res_esv = (unsigned char)mls_type_get_char(res, 1);
-                res += 1;
-                if (!((MLS_ELNET_ESV_Get == esv
-                        && MLS_ELNET_ESV_Get_Res == res_esv)
-                        ||
-                      (MLS_ELNET_ESV_SetC == esv
-                        && MLS_ELNET_ESV_Set_Res == res_esv)))
-                {
-                    /* ignore message retry, XXXX error log */
-                    i--;
-                    continue;
-                }
-                /* opc */
-                res_opc = (unsigned char)mls_type_get_char(res, 1);
-                res += 1;
-                if (1 != res_opc) {
-                    /* ignore message retry, XXXX error log */
-                    i--;
-                    continue;
-                }
-                /* epc */
-                res_epc = (unsigned char)mls_type_get_char(res, 1);
-                res += 1;
-                if (_epc != res_epc) {
-                    /* ignore message retry, XXXX error log */
-                    i--;
-                    continue;
-                }
-                /* pdc */
-                res_pdc = (unsigned char)mls_type_get_char(res, 1);
-                res += 1;
-                if (!((MLS_ELNET_ESV_Get == esv && res_pdc != 0)
-                        ||
-                      (MLS_ELNET_ESV_SetC == esv && res_pdc == 0)))
-                {
-                    /* ignore message retry, XXXX error log */
-                    i--;
-                    continue;
-                }
-                /* edt */
-                res_datap = res;
-                res_datalen = res_pdc;
-
-                /*
-                 * OK! response valid packet.
-                 */
-                /* output result */
-                output_data(res_epc,
-                    ((_run_mode) ? _epc_rawdata : res_datap),
-                    ((_run_mode) ? _epc_rawdata_len : res_datalen));
-                ret = 0;
-                goto out;
-            }
-            break;
-        }
+    /* RPC */
+    reslen = mls_elnet_rpc(_cln_ctx, addr, port, req, reqlen, res, reslen);
+    if (reslen < 0) {
+        /* XXXX error */
+        ret = -1;
+        goto out;
     }
-    ret = -1;
+
+    /*
+     * OK! response valid packet.
+     */
+    /* output result */
+    output_data(_epc,
+        ((_run_mode) ? _epc_rawdata : &(res->data[0])),
+        ((_run_mode) ? _epc_rawdata_len : (res->data[1])));
 
 out:
     return ret;
