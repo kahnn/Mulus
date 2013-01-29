@@ -9,7 +9,7 @@ LDLIBS = -lmls_util
 
 OUT = el_prop
 SRCS = main.c \
-	$(COMM_DIR)/mls_el.c $(COMM_DIR)/mls_elnet.c \
+	$(COMM_DIR)/mls_el.c $(COMM_DIR)/mls_elnet.c $(COMM_DIR)/mls_elope.c \
 	$(COMM_DIR)/mls_node.c $(COMM_DIR)/mls_obj.c
 
 OBJS = $(SRCS:.c=.o)

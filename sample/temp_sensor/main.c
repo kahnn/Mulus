@@ -6,7 +6,6 @@
 
 #include "mls_obj.h"
 #include "mls_node.h"
-#include "mls_elnet.h"
 #include "mls_el.h"
 
 /*
@@ -17,25 +16,6 @@ extern struct mls_eoj* mls_el_get_profile(void);
 extern struct mls_eoj* mls_el_get_temperature_sensor(void);
 
 /**********************************************************************/
-#if 0
-/* local command */
-#define UD_SOCK_NAME "/tmp/command_ud_dgram"
-static void
-_lcommand_handler(struct mls_evt* evt, void* tag)
-{
-    /* XXX local command: これも形式決めて、object定義の中に入れるか？ */
-    struct mls_net_ud_srv *csrv;
-    /* Initialize local command. */
-    csrv = mls_net_udgram_srv_open(UD_SOCK_NAME);
-    if (NULL == csrv) {
-        fprintf(stderr, "ERROR: mls_net_udgram_srv_open()\n");
-        goto out;
-    }
-
-    struct mls_el_ctx *ctx = (struct mls_el_ctx *)tag;
-    struct mls_net_ud_srv *csrv = mls_el_get_csrv(ctx);
-}
-#endif
 
 /*
  * time interval handler.
@@ -60,7 +40,7 @@ _timeinterval_handler(struct mls_evt* evt, void* tag)
   create profile
   create device object
   create node
-  initialize network
+  initialize network 
   create context
  */
 static int
@@ -100,9 +80,7 @@ init(char *ifname, struct mls_el_ctx **ctxpp)
 
     /* Initialize EL Context. */
     context = 
-        mls_el_create_context(node, elnet, 
-            NULL, NULL,
-            _timeinterval_handler, tag);
+        mls_el_create_context(node, elnet, _timeinterval_handler, tag);
     if (NULL == context) {
         fprintf(stderr, "ERROR: mls_el_create_context()\n");
         goto out;

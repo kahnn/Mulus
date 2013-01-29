@@ -26,7 +26,21 @@ UDPコマンド処理部
         GET/SETはECHONET通信部と同じところが使える。
      クライアントコマンド
 DEV OBJECT共通処理のくくりだし
-     
+ある程度の疎通試験
+公開準備
+  実装関係のTODOをある程度潰す
+  サンプル、ツールの仕様をREADMEにうつす
+  サンプル、ツールのソースコメントを整備する
+  open-echoのREADME説明を確認する
+  TODOをREADME.mdに変更して、TODOは本当に色々なメモ用ファイルにする。
+  LICENSEの確認をおこなう
+  ディレクトリやMakefileの整備を行う
+  タグを付ける
+公開
+  公開用の内容を push する
+  github project description に説明を加える
+      (c-language による ECHONET Lite 実装であること)
+
 
 共通-------------
 パケット送信、受信のメソッドを mls_elnet に統合し、送受信ダンプを取得可能にする。

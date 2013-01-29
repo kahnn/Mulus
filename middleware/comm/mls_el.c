@@ -9,14 +9,9 @@
 struct mls_el_ctx {
     struct mls_node *lnode;
     struct mls_elnet *elnet;
-
-    struct mls_net_ud_srv *csrv;
-    mls_evt_callback_t csrvfunc;
-
+    struct mls_elope *elope;
     mls_evt_callback_t tinterval;
-
     struct mls_evt *evt;
-    
     void *tag;
 };
 
@@ -28,8 +23,8 @@ struct mls_node*
 mls_el_get_node(struct mls_el_ctx *ctx) { return ctx->lnode; }
 struct mls_elnet*
 mls_el_get_elnet(struct mls_el_ctx *ctx) { return ctx->elnet; }
-struct mls_net_ud_srv*
-mls_el_get_csrv(struct mls_el_ctx *ctx) { return ctx->csrv; }
+struct mls_elope*
+mls_el_get_elope(struct mls_el_ctx *ctx) { return ctx->elope; }
 void*
 mls_el_get_tag(struct mls_el_ctx *ctx) { return ctx->tag; }
 
@@ -82,21 +77,21 @@ _set_event(struct mls_el_ctx *ctx)
     ret = mls_evt_add_handle(evt, MLS_EVT_TIMEOUT, 0 /* timeout key=0 */,
         _timeinterval_handler, ctx);
     if (ret < 0) {
-        fprintf(stderr, "ERROR: mls_evt_add_handle(%d)\n", ret);
+        fprintf(stderr, "ERROR: mls_evt_add_handle(TI,%d)\n", ret);
         goto out;
     }
-    /* local command */
-    ret = mls_evt_add_handle(evt, MLS_EVT_FD, ctx->csrv->sock,
-        ctx->csrvfunc, ctx);
+    /* operation command */
+    ret = mls_evt_add_handle(evt, MLS_EVT_FD, ctx->elope->srv->sock,
+        mls_elope_event_handler, ctx);
     if (ret < 0) {
-        fprintf(stderr, "ERROR: mls_evt_add_handle(%d)\n", ret);
+        fprintf(stderr, "ERROR: mls_evt_add_handle(OPE,%d)\n", ret);
         goto out;
     }
     /* EL multicat */
     ret = mls_evt_add_handle(evt, MLS_EVT_FD, ctx->elnet->srv->sock,
         mls_elnet_event_handler, ctx);
     if (ret < 0) {
-        fprintf(stderr, "ERROR: mls_evt_add_handle(%d)\n", ret);
+        fprintf(stderr, "ERROR: mls_evt_add_handle(NET,%d)\n", ret);
         goto out;
     }
 
@@ -108,23 +103,24 @@ out:
 
 struct mls_el_ctx*
 mls_el_create_context(struct mls_node *local_node, 
-    struct mls_elnet *elnet, 
-    struct mls_net_ud_srv *csrv,
-    mls_evt_callback_t csrvfunc,
-    mls_evt_callback_t tinterval,
-    void *tag)
+    struct mls_elnet *elnet, mls_evt_callback_t tinterval, void *tag)
 {
     struct mls_el_ctx *ctx = NULL;
+    struct mls_elope *elope = NULL;
+
+    if ((elope = mls_elope_init()) == NULL) {
+        /* XXX error handling */
+        goto out;
+    }
 
     lctx.lnode = local_node;
     lctx.elnet = elnet;
-    lctx.csrv = csrv;
-    lctx.csrvfunc = csrvfunc;
+    lctx.elope = elope;
     lctx.tinterval = tinterval;
     lctx.tag = tag;
 
     if (_set_event(&lctx) < 0) {
-        /* XXX error handling */
+        /* XXX error handling, resource free... */
         goto out;
     }
 
@@ -138,6 +134,9 @@ void
 mls_el_destroy_context(struct mls_el_ctx* ctx)
 {
     mls_evt_fin(ctx->evt);
+    ctx->evt = NULL;
+    mls_elope_term(ctx->elope);
+    ctx->elope = NULL;
     /* XXXX other finish */
 }
 

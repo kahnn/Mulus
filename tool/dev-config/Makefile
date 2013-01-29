@@ -7,7 +7,7 @@ CFLAGS = -g -Wall -DDEBUG -I$(UTIL_DIR) -I$(INC_DIR)
 LDFLAGS = -L$(UTIL_DIR)
 LDLIBS = -lmls_util
 
-OUT = el_discover
+OUT = dev_config
 SRCS = main.c \
 	$(COMM_DIR)/mls_el.c $(COMM_DIR)/mls_elnet.c $(COMM_DIR)/mls_elope.c \
 	$(COMM_DIR)/mls_node.c $(COMM_DIR)/mls_obj.c

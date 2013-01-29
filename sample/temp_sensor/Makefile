@@ -10,8 +10,8 @@ LDLIBS = -lmls_util
 
 OUT = temp_sensor
 SRCS = main.c \
-	$(COMM_DIR)/mls_el.c $(COMM_DIR)/mls_elnet.c \
-	$(COMM_DIR)/mls_node.c $(COMM_DIR)/mls_obj.c  \
+	$(COMM_DIR)/mls_el.c $(COMM_DIR)/mls_elnet.c $(COMM_DIR)/mls_elope.c \
+	$(COMM_DIR)/mls_node.c $(COMM_DIR)/mls_obj.c \
 	$(OBJ_DIR)/profile.c $(OBJ_DIR)/temperature_sensor.c
 OBJS = $(SRCS:.c=.o)
 

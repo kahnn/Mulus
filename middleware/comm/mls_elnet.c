@@ -1,8 +1,8 @@
-#include    <stdio.h>
-#include    <string.h>
-#include    <ctype.h>
-#include    <limits.h>
-#include    <errno.h>
+#include <stdio.h>
+#include <string.h>
+#include <ctype.h>
+#include <limits.h>
+#include <errno.h>
 
 #include "mls_type.h"
 #include "mls_elnet.h"
@@ -169,34 +169,6 @@ _select_response_esv(unsigned char req_esv, int status)
     return res_esv;
 }
 
-static void
-_announce_property(struct mls_el_ctx *ctx,
-    struct mls_node* node, struct mls_eoj_code *deojc,
-    unsigned char epc, unsigned char pdc, unsigned char *req)
-{
-    unsigned int tmplen = UCHAR_MAX;
-    unsigned char tmp[UCHAR_MAX];
-    unsigned char *buf = tmp;
-    buf = mls_elnet_set_packet_base(_get_next_tid(),
-        deojc, &(node->prof->code),
-        MLS_ELNET_ESV_INF, 1, buf, &tmplen);
-    buf[0] = epc;
-    buf[1] = pdc;
-    memcpy(&(buf[2]), req, pdc);
-    buf += (2 + pdc);
-
-    {
-        int ret;
-        struct mls_elnet *elnet = mls_el_get_elnet(ctx);
-        ret = sendto(elnet->srv->sock, tmp, (buf - tmp), 0,
-            (struct sockaddr*)&(elnet->srv->to), elnet->srv->tolen);
-        if (-1 == ret) {
-            /* XXXX error log */
-            perror("sendto@mls_elnet_announce_profile()");
-        }
-    }
-}
-
 /*
   @arg reslen resのサイズが指定され、コピー後の残りサイズを返す。
   @return =0 : 処理正常
@@ -252,7 +224,8 @@ _set_properties(struct mls_el_ctx *ctx,
         ret_prop = epr->setf(eoj, epc, req, pdc);
         if ((0 < ret_prop) && (epr->is_anno_when_changed)) {
             /* announce */
-            _announce_property(ctx, node, deojc, epc, pdc, req);
+            mls_elnet_announce_property(mls_el_get_elnet(ctx),
+                node, deojc, epc, pdc, req);
         }
     set_res:
         {
@@ -532,6 +505,36 @@ out:
 }
 
 /* ------------------------------------------------------------- */
+
+/*
+  指定されたプロパティの内容をアナウンスする。
+ */
+void
+mls_elnet_announce_property(struct mls_elnet *elnet,
+    struct mls_node* node, struct mls_eoj_code *deojc,
+    unsigned char epc, unsigned char pdc, unsigned char *data)
+{
+    unsigned int tmplen = UCHAR_MAX;
+    unsigned char tmp[UCHAR_MAX];
+    unsigned char *buf = tmp;
+    buf = mls_elnet_set_packet_base(_get_next_tid(),
+        deojc, &(node->prof->code),
+        MLS_ELNET_ESV_INF, 1, buf, &tmplen);
+    buf[0] = epc;
+    buf[1] = pdc;
+    memcpy(&(buf[2]), data, pdc);
+    buf += (2 + pdc);
+
+    {
+        int ret;
+        ret = sendto(elnet->srv->sock, tmp, (buf - tmp), 0,
+            (struct sockaddr*)&(elnet->srv->to), elnet->srv->tolen);
+        if (-1 == ret) {
+            /* XXXX error log */
+            perror("sendto@mls_elnet_announce_profile()");
+        }
+    }
+}
 
 /*
   初期処理で、指定されたノードの内容をアナウンスする。

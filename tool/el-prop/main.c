@@ -21,13 +21,13 @@ remote-host = ipaddr:port
 /**********************************************************************/
 int _run_mode; /* -s=1 -or -g=0 */
 char *_remote_host;
-unsigned char _cgc;
-unsigned char _clc;
-unsigned char _inc;
+struct mls_eoj_code _eoj_code;
 unsigned char _epc;
 char *_epc_val = "dummy";
+
 unsigned char _epc_rawdata[UCHAR_MAX];
 unsigned char _epc_rawdata_len;
+
 struct mls_net_mcast_cln* _cln_ctx = NULL;
 /**********************************************************************/
 
@@ -41,15 +41,16 @@ usage(char *name)
 static int
 parse_rawdata(char *data, unsigned char *rawdata, unsigned char* rawdata_len)
 {
-    int i;
-    char *str, *token, *saveptr;
+    int i, len = strlen(data);
+    char *str = data;
+    char token[2];
 
     *rawdata_len = 0;
-    for (i = 0, str = data; ; i++, str = NULL) {
-        token = strtok_r(str, "|", &saveptr);
-        if (token == NULL)
-            break;
-        *rawdata = (unsigned char)strtoul(token, NULL, 0);
+    for (i = 0, str = data; i < len; i += 2, str += 2) {
+        token[0] = str[0];
+        token[1] = str[1];
+
+        *rawdata = (unsigned char)strtoul(token, NULL, 16);
 
         rawdata += 1;
         *rawdata_len += 1;
@@ -63,12 +64,9 @@ output_data(unsigned char epc, unsigned char *datap, unsigned int datalen)
 {
     int i;
 
-    fprintf(stdout, "0x%x,", epc);
+    fprintf(stdout, "%02x,", epc);
     for (i = 0; i < datalen; i++) {
-        fprintf(stdout, "0x%x", *(datap + i));
-        if (datalen != (i + 1)) {
-            fprintf(stdout, "|");
-        }
+        fprintf(stdout, "%02x", *(datap + i));
     }
     fprintf(stdout, "\n");
 }
@@ -95,9 +93,9 @@ parse_args(int argc, char* argv[])
     }
 
     _remote_host = argv[optind++];
-    _cgc = (unsigned char)strtoul(argv[optind++], NULL, 0);
-    _clc = (unsigned char)strtoul(argv[optind++], NULL, 0);
-    _inc = (unsigned char)strtoul(argv[optind++], NULL, 0);
+    _eoj_code.cgc = (unsigned char)strtoul(argv[optind++], NULL, 0);
+    _eoj_code.clc = (unsigned char)strtoul(argv[optind++], NULL, 0);
+    _eoj_code.inc = (unsigned char)strtoul(argv[optind++], NULL, 0);
     _epc = (unsigned char)strtoul(argv[optind++], NULL, 0);
     if (_run_mode) {
         _epc_val = argv[optind++];
@@ -105,7 +103,8 @@ parse_args(int argc, char* argv[])
 
 #if 1
     fprintf(stderr, "%d:%s:%x,%x,%x:%x,%s\n",
-        _run_mode, _remote_host, _cgc, _clc, _inc, _epc, _epc_val);
+        _run_mode, _remote_host, 
+        _eoj_code.cgc, _eoj_code.clc, _eoj_code.inc, _epc, _epc_val);
 #endif
 
     if (_run_mode)
@@ -190,9 +189,7 @@ command(void)
     seoj.cgc = MLS_EL_CGC_PROFILE;
     seoj.clc = MLS_EL_CLC_NODEPROFILE;
     seoj.inc = 0x01;
-    deoj.cgc = _cgc;
-    deoj.clc = _clc;
-    deoj.inc = _inc;
+    deoj = _eoj_code;
     esv = (_run_mode) ? MLS_ELNET_ESV_SetC : MLS_ELNET_ESV_Get;
 
     req = mls_elnet_set_packet_base(tid, 
