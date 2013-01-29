@@ -1,6 +1,4 @@
-#SUBDIRS = util test
-SUBDIRS = util comm
-
+SUBDIRS = dev-config el-discover el-prop
 ##########################################################
 
 all:

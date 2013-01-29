@@ -1,8 +1,9 @@
-UTIL_DIR = ../util
+INC_DIR = ../include
+LIB_DIR = ../lib
 
 CC = gcc
-CFLAGS = -g -Wall -DDEBUG -I$(UTIL_DIR)
-LDFLAGS = -L$(UTIL_DIR)
+CFLAGS = -g -Wall -DDEBUG -I$(INC_DIR)
+LDFLAGS = -L$(LIB_DIR)
 LDLIBS = -lmls_util
 
 OUT1 = test_log

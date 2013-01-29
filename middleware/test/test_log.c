@@ -16,7 +16,7 @@ main(int ac, char *argv[])
         char* data = "fedcba9876543210XYZ";
         fprintf(stderr,
             "Address   |>>     8bytes      >>| |>>      8bytes     <<|  |>>  to char  <<|\n");
-        mls_log_hexdump(data, strlen(data) + 1);
+        mls_log_hexdump(data, strlen(data) + 1, stderr);
     }
 
     {

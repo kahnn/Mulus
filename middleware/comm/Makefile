@@ -5,8 +5,8 @@ CC = gcc
 CFLAGS = -g -Wall -DDEBUG -I$(INCDIR)
 LDFLAGS = 
 
-OUT = libmls_util.a
-SRCS = mls_log.c mls_config.c mls_net.c mls_evt.c mls_type.c
+OUT = libmls_comm.a
+SRCS = mls_el.c mls_elope.c mls_elnet.c mls_node.c mls_obj.c
 OBJS = $(SRCS:.c=.o)
 
 .c.o:
