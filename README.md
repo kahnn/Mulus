@@ -9,7 +9,7 @@ Project Mulus (以降 Mulus) は、[エコーネットコンソーシアム](htt
 ## 2. 機能一覧＆サポート状況
 
 ECHONET Lite規格に対する Mulusのサポート状況については、以下の通りです。
-まだ、Mulus は開始されたばかりです。
+まだ、Mulus は開始されたばかりです。(2013/01/29現在 α版未リリース)
 
 ```
 ---------------------------------------------------------
@@ -171,18 +171,16 @@ ECHONET Lite ノード立ち上げ処理  (第4章 基本シーケンス)
     -MWARE P.6-6 - 6-10
 
 
-[MWARE：第2部 ECHONET Lite 通信ミドルウェア仕様](http://www.echonet.gr.jp/spec/pdf_v101_lite/ECHONET-Lite_Ver.1.01_02_.pdf)
 ```
+[MWARE：第2部 ECHONET Lite 通信ミドルウェア仕様](http://www.echonet.gr.jp/spec/pdf_v101_lite/ECHONET-Lite_Ver.1.01_02_.pdf)
 
 ### **サポートオブジェクトについて**
 
 ```
 機器オブジェクトスーパークラス (OBJD P.2-1)
 温度センサクラス  (OBJD P.3-27)
-
-[OBJD：APPENDIX ECHONET機器オブジェクト詳細規定 Release B](http://www.echonet.gr.jp/spec/spec_app_b.htm)内で定められている
-
 ```
+[OBJD：APPENDIX ECHONET機器オブジェクト詳細規定 Release B](http://www.echonet.gr.jp/spec/spec_app_b.htm)内で定められている
 
 
 ## 3. 利用方法
@@ -268,3 +266,7 @@ COMMIT
 
 Mulus is free software, available under the terms of a [MIT license](http://opensource.org/licenses/mit-license.php).
 Please see the LICENSE file for details.
+
+## 8. リリース
+
+2013/02/?? α版リリース
