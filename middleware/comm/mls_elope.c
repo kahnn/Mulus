@@ -15,6 +15,45 @@ static unsigned char _res[MLS_ELOPE_PACKET_LENGTH_MAX];
 
 /***************************************************************/
 
+/* TODO: 設定で切り替え可能にする */
+static int _is_packet_hex_dump = 1;
+
+static ssize_t
+SENDTO(int sockfd, const void *buf, size_t len, int flags,
+    const struct sockaddr *dest_addr, socklen_t addrlen)
+{
+    ssize_t slen;
+    if (_is_packet_hex_dump) {
+        /* TODO: refine hex dump log */
+        fprintf(stderr, "[SEND]: len=%d\n", (int)len);
+        mls_log_hexdump((char*)buf, len, stderr);
+    }
+
+    slen = sendto(sockfd, buf, len, flags, dest_addr, addrlen);
+    return slen;
+}
+
+static ssize_t
+RECVFROM(int sockfd, void *buf, size_t len, int flags,
+    struct sockaddr *from, socklen_t *addrlen)
+{
+    ssize_t rlen;
+    rlen = recvfrom(sockfd, buf, len, flags, from, addrlen);
+    if ((0 < rlen) && _is_packet_hex_dump) {
+        /* TODO: refine hex dump log */
+#if 0
+        fprintf(stderr, "[RECV]: %ld=%d\n",sizeof(struct sockaddr_un),*addrlen);
+        fprintf(stderr, "[RECV]: %d %s\n", from->sun_family, from->sun_path);
+#endif
+        fprintf(stderr, "[RECV]: len=%d,\n", (int)rlen);
+        mls_log_hexdump((char*)buf, rlen, stderr);
+    }
+
+    return rlen;
+}
+
+/***************************************************************/
+
 struct mls_elope*
 mls_elope_init(void)
 {
@@ -23,8 +62,8 @@ mls_elope_init(void)
 
     csrv = mls_net_udgram_srv_open(MLS_ELOPE_UD_SOCK_NAME);
     if (NULL == csrv) {
-        /* XXX error */
-        fprintf(stderr, "ERROR: mls_net_udgram_srv_open()\n");
+        LOG_ERR(MLS_LOG_DEFAULT_MODULE, 
+            "mls_net_udgram_srv_open() error.\n");
         goto out;
     }
     _lelope.srv = csrv;
@@ -50,39 +89,28 @@ _recv_request(struct mls_elope *elope, struct mls_elope_packet **reqp)
     int len = sizeof(_req);
 
     elope->from_len = sizeof(elope->from);
-    len = recvfrom(elope->srv->sock, req, len, 0,
+    len = RECVFROM(elope->srv->sock, req, len, 0,
         (struct sockaddr*)&(elope->from), &(elope->from_len));
     if (len < 0) {
-        /* XXXX error log */
-        perror("recvfrom");
         ret = -errno;
+        LOG_ERR(MLS_LOG_DEFAULT_MODULE,
+            "recvfrom(%d): %s.\n", errno, strerror(errno));
         goto out;
     }
-#if 0
-    {
-        printf("RECVFROM: %ld=%d\n", sizeof(struct sockaddr_un), from_len);
-        printf("RECVFROM: %d %s\n", from.sun_family, from.sun_path);
-    }
-#endif    
-#if 1
-    {
-        fprintf(stdout, "[REQ]:len=%d\n", (int)len);
-        mls_log_hexdump((char*)req, len, stdout);
-    }
-#endif
 
     *reqp = (struct mls_elope_packet*)req;
 
     /* check packet (length) */
     if (len < MLS_ELOPE_PACKET_HEADER_LENGTH) {
-        /* ignore message XXXX error log */
+        LOG_ERR(MLS_LOG_DEFAULT_MODULE, "invalid packet length = %d", len);
         ret = -1;
         goto out;
     }
 
     switch((*reqp)->svc) {
     default:
-        /* ignore message XXXX error log */
+        LOG_ERR(MLS_LOG_DEFAULT_MODULE,
+            "invalid packet svc = %d", (*reqp)->svc);
         ret = -1;
         goto out;
 
@@ -102,18 +130,12 @@ _send_response(struct mls_elope *elope, struct mls_elope_packet *res)
     int len, ret = 0;
     len = mls_elope_packet_get_length(res);
 
-#if 1
-    {
-        fprintf(stdout, "[RES]:len=%d\n", len);
-        mls_log_hexdump((char*)res, len, stdout);
-    }
-#endif
-    len = sendto(elope->srv->sock, res, len, 0, 
+    len = SENDTO(elope->srv->sock, res, len, 0, 
         (struct sockaddr*)&(elope->from), (elope->from_len));
     if (len < 0) {
-        /* XXXX error log */
-        perror("sendto():");
         ret = -errno;
+        LOG_ERR(MLS_LOG_DEFAULT_MODULE,
+            "sendto(%d): %s.\n", errno, strerror(errno));
         goto out;
     }
 out:
@@ -133,6 +155,9 @@ _set_properties(struct mls_el_ctx *ctx, struct mls_elope_packet *req)
     eoj = mls_el_node_get_device(node, &(req->deojc));
     if (NULL == eoj) {
         rc = MLS_ELOPE_RCODE_NOENT_INSTANCE; /* not found deoj */
+        LOG_WARN(MLS_LOG_DEFAULT_MODULE,
+            "not found deoj(%d,%d,%d)\n",
+            req->deojc.cgc, req->deojc.clc, req->deojc.inc);
         goto out;
     }
 
@@ -140,15 +165,19 @@ _set_properties(struct mls_el_ctx *ctx, struct mls_elope_packet *req)
     epr = mls_eoj_get_property(eoj, req->epc);
     if (NULL == epr) {
         rc = MLS_ELOPE_RCODE_NOENT_EPC; /* not found property */
+        LOG_WARN(MLS_LOG_DEFAULT_MODULE, "not found epr(%d)\n", req->epc);
         goto out;
     }
     if (NULL == epr->setf) {
         rc = MLS_ELOPE_RCODE_NOENT_METHOD; /* not found method */
+        LOG_WARN(MLS_LOG_DEFAULT_MODULE,
+                "cannot access(%x)\n", epr->setf);
         goto out;
     }
     ret_prop = epr->setf(eoj, req->epc, req->data, req->pdc);
     if (ret_prop <= 0) {
         rc = MLS_ELOPE_RCODE_INVALID_DATA;
+        LOG_WARN(MLS_LOG_DEFAULT_MODULE, "setf(%d,%d)\n", req->epc, ret_prop);
         goto out;
     }
     else if (epr->is_anno_when_changed) {
@@ -175,6 +204,9 @@ _get_properties(struct mls_el_ctx *ctx,
     eoj = mls_el_node_get_device(node, &(req->deojc));
     if (NULL == eoj) {
         rc = MLS_ELOPE_RCODE_NOENT_INSTANCE; /* not found deoj */
+        LOG_WARN(MLS_LOG_DEFAULT_MODULE,
+            "not found deoj(%d,%d,%d)\n",
+            req->deojc.cgc, req->deojc.clc, req->deojc.inc);
         goto out;
     }
 
@@ -182,15 +214,19 @@ _get_properties(struct mls_el_ctx *ctx,
     epr = mls_eoj_get_property(eoj, req->epc);
     if (NULL == epr) {
         rc = MLS_ELOPE_RCODE_NOENT_EPC; /* not found property */
+        LOG_WARN(MLS_LOG_DEFAULT_MODULE, "not found epr(%d)\n", req->epc);
         goto out;
     }
     if (NULL == epr->getf) {
         rc = MLS_ELOPE_RCODE_NOENT_METHOD; /* not found method */
+        LOG_WARN(MLS_LOG_DEFAULT_MODULE,
+                "cannot access(%x)\n", epr->getf);
         goto out;
     }
     ret_prop = epr->getf(eoj, req->epc, data, pdc);
     if (ret_prop <= 0) {
         rc = MLS_ELOPE_RCODE_INVALID_DATA;
+        LOG_WARN(MLS_LOG_DEFAULT_MODULE, "getf(%d,%d)\n", req->epc, ret_prop);
         goto out;
     }
     *pdc = (unsigned char)ret_prop;
@@ -210,6 +246,7 @@ _handle_message(struct mls_el_ctx *ctx,
 
     switch(req->svc) {
     default:
+        LOG_ERR(MLS_LOG_DEFAULT_MODULE, "invalid svc(%d)\n", req->svc);
         assert(0);
         break;
 
@@ -244,21 +281,21 @@ mls_elope_event_handler(struct mls_evt *evt, void *tag)
 
     if ((ret = _recv_request(elope, &req)) != 0) {
         /* Invalid message, don't need response */
-        /* XXX error */
-        fprintf(stderr, "ERROR: mls_elope_event_handler(1)\n");
+        LOG_ERR(MLS_LOG_DEFAULT_MODULE,
+            "mls_elope_event_handler(1,%d)\n", ret);
         goto out;
     }
 
     if ((ret = _handle_message(ctx, req, &res)) != 0) {
-        /* XXX error */
         /* don't need response */
-        fprintf(stderr, "ERROR: mls_elope_event_handler(2)\n");
+        LOG_ERR(MLS_LOG_DEFAULT_MODULE,
+            "mls_elope_event_handler(2,%d)\n", ret);
         goto out;
     }
 
     if ((ret = _send_response(elope, res)) != 0) {
-        /* XXX error */
-        fprintf(stderr, "ERROR: mls_elope_event_handler(3)\n");
+        LOG_ERR(MLS_LOG_DEFAULT_MODULE,
+            "mls_elope_event_handler(3,%d)\n", ret);
         goto out;
     }
 
@@ -278,23 +315,23 @@ mls_elope_rpc(struct mls_net_ud_cln *cln,
     ssize_t len;
 
     /* request */
-    if ((len = sendto(cln->sock, req, mls_elope_packet_get_length(req),
+    if ((len = SENDTO(cln->sock, req, mls_elope_packet_get_length(req),
                 0, (struct sockaddr *)&(cln->to), cln->tolen)) == -1)
     {
-        /* XXX error */
         ret = -errno;
-        perror("sendto");
+            LOG_ERR(MLS_LOG_DEFAULT_MODULE,
+                "sendto(%d): %s.\n", errno, strerror(errno));
         goto out;
     }
 
     /* response */
     fromlen = sizeof(from);
-    if ((len = recvfrom(cln->sock, (char*)res, reslen, 
+    if ((len = RECVFROM(cln->sock, (char*)res, reslen, 
                 0, (struct sockaddr*)&from, &fromlen)) == -1)
     {
-        /* XXX error */
         ret = -errno;
-        perror("recvfrom");
+        LOG_ERR(MLS_LOG_DEFAULT_MODULE,
+            "recvfrom(%d): %s.\n", errno, strerror(errno));
         goto out;
     }
 

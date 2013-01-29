@@ -2,6 +2,8 @@
   温度センサー サンプル実装：
  */
 #include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
 #include <errno.h>
 
 #include "mls_obj.h"
@@ -14,6 +16,13 @@
  */
 extern struct mls_eoj* mls_el_get_profile(void);
 extern struct mls_eoj* mls_el_get_temperature_sensor(void);
+
+#define errlog(fmt, ...) do{                   \
+        fprintf(stderr, fmt, ##__VA_ARGS__);      \
+  }while(0)
+#define showlog(fmt, ...) do{                   \
+        fprintf(stdout, fmt, ##__VA_ARGS__);      \
+  }while(0)
 
 /**********************************************************************/
 
@@ -30,7 +39,7 @@ _timeinterval_handler(struct mls_evt* evt, void* tag)
     /* nothing todo. */
 #if 0
     struct mls_el_ctx *ctx = (struct mls_el_ctx *)tag;
-    fprintf(stdout, "TIMEOUT: %u %s\n",
+    showlog("TIMEOUT: %u %s\n",
         (unsigned int)time(NULL), (char*)tag);
 #endif
 }
@@ -54,6 +63,9 @@ init(char *ifname, struct mls_el_ctx **ctxpp)
     /* 必要に応じて独自の情報を渡せるようにする.
        後からは mls_el_get_tag() で取り出せる */
     void *tag = "TemperatureSensor-TAG";
+
+    /* 全体の初期化 */
+    mls_el_ini();
 
     /* Get Objects */
     profile = mls_el_get_profile(); 
@@ -82,7 +94,7 @@ init(char *ifname, struct mls_el_ctx **ctxpp)
     context = 
         mls_el_create_context(node, elnet, _timeinterval_handler, tag);
     if (NULL == context) {
-        fprintf(stderr, "ERROR: mls_el_create_context()\n");
+        errlog("ERROR: mls_el_create_context()\n");
         goto out;
     }
     *ctxpp = context;
@@ -95,6 +107,7 @@ static void
 term(struct mls_el_ctx *ctx)
 {
     mls_el_destroy_context(ctx);
+    mls_el_fin();
 }
 
 /*

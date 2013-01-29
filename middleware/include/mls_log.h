@@ -26,6 +26,9 @@ struct mls_log_mod {
     enum mls_log_level m_level;
 };
 
+/* for base library. */
+#define MLS_LOG_DEFAULT_MODULE (0)
+
 struct mls_log_conf {
     char* c_path;
     int c_file_size;

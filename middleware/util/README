@@ -6,7 +6,20 @@ module 数と予約番号は別ファイルに定義し、それの設定は別�
  uti.h:
    #define MOD_UTIL  0  -> 予約番号: Network, Thread, Config, ...
  util.c:
-   mls_util_init() {
-       mls_log_set_ini("/var/tmp/xxxxx.log", (1024*1024), MLS_LOG_INFO, 10);
-       mls_log_set_module(MOD_UTIL, "UTIL", MLS_LOG_WARN);
-       ....
+   mls_log_set_ini("/var/tmp/xxxxx.log", (1024*1024), MLS_LOG_INFO, 10);
+   mls_log_set_module(MOD_UTIL, "UTIL", MLS_LOG_WARN);
+   ....
+
+   LOG_ERR(MOD_UTIL, "xxxxx %d\n", xx);
+
+   /* 基本ライブラリについては MLS_LOG_DEFAULT_MODULE を利用する */
+   // 以下の処理を mls_el_ini() で実施済み
+   // mls_log_set_module(MLS_LOG_DEFAULT_MODULE, "MLS", MLS_LOG_WARN);
+   LOG_ERR(MLS_LOG_DEFAULT_MODULE, "xxxxx %d\n", xx);
+
+   ....
+   mls_log_fin();
+
+ 異常終了時に使用する関数
+   MLS_FATAL("mls_log_ini - %d", ret);
+   MLS_FATAL_PERROR("mls_log_ini - %d", ret);

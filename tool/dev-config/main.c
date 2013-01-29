@@ -13,6 +13,13 @@
 #include "mls_elnet.h"
 #include "mls_elope.h"
 
+#define errlog(fmt, ...) do{                   \
+        fprintf(stderr, fmt, ##__VA_ARGS__);      \
+  }while(0)
+#define showlog(fmt, ...) do{                   \
+        fprintf(stdout, fmt, ##__VA_ARGS__);      \
+  }while(0)
+
 /**********************************************************************/
 int _run_mode; /* -s=1 -or -g=0 */
 
@@ -34,7 +41,7 @@ static unsigned char _res[MLS_ELOPE_PACKET_LENGTH_MAX];
 void
 usage(char *name)
 {
-    fprintf(stderr, "Usage: %s {-s|-g} cgc clc inc epc [value]\n", name);
+    errlog("Usage: %s {-s|-g} cgc clc inc epc [value]\n", name);
     exit(-1);
 }
 
@@ -65,11 +72,11 @@ output_data(unsigned char epc, unsigned char *datap, unsigned int datalen)
 {
     int i;
 
-    fprintf(stdout, "%02x,", epc);
+    showlog("%02x,", epc);
     for (i = 0; i < datalen; i++) {
-        fprintf(stdout, "%02x", *(datap + i));
+        showlog("%02x", *(datap + i));
     }
-    fprintf(stdout, "\n");
+    showlog("\n");
 }
 
 static void
@@ -102,7 +109,7 @@ parse_args(int argc, char* argv[])
     }
 
 #if 1
-    fprintf(stderr, "%d:%x,%x,%x:%x,%s\n",
+    errlog("%d:%x,%x,%x:%x,%s\n",
         _run_mode, 
         _eoj_code.cgc, _eoj_code.clc, _eoj_code.inc, _epc, _epc_val);
 #endif
@@ -118,7 +125,7 @@ open_sock(void)
 
     _cln_ctx = mls_net_udgram_cln_open(MLS_ELOPE_UD_SOCK_NAME);
     if (NULL == _cln_ctx) {
-        fprintf(stderr, "mls_net_udgram_cln_open() error.\n");
+        errlog("mls_net_udgram_cln_open() error.\n");
         ret = -1;
         goto out;
     }
@@ -154,7 +161,7 @@ command(void)
      */
     ret = mls_elope_rpc(_cln_ctx, req, res, sizeof(_res));
     if (ret < 0) {
-        /* XXX error */
+        errlog("mls_elope_rpc() error.\n");
         goto out;
     }
 
@@ -164,14 +171,12 @@ command(void)
     if (!((_run_mode && res->svc == MLS_ELOPE_SVC_SET_RES) || 
           ((!_run_mode) && res->svc == MLS_ELOPE_SVC_GET_RES)))
     {
-        /* XXX error */
-        fprintf(stderr, "Invalid packet (%d,%d)\n", _run_mode, (int)res->svc);
+        errlog("Invalid packet (%d,%d)\n", _run_mode, (int)res->svc);
         ret = -1;
         goto out;
     }
     if (MLS_ELOPE_RCODE_SUCCESS != res->rc) {
-        /* XXX error */
-        fprintf(stderr, "Error response (%d)\n", (int)res->rc);
+       errlog("Error response (%d)\n", (int)res->rc);
         ret = -1;
         goto out;
     }
@@ -182,6 +187,7 @@ command(void)
     output_data(res->epc,
         ((_run_mode) ? _epc_rawdata : res->data),
         ((_run_mode) ? _epc_rawdata_len : res->pdc));
+    ret = 0;
 
 out:
     return ret;

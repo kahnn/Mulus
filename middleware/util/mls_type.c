@@ -68,7 +68,7 @@ mls_type_get_int(unsigned char* buf, unsigned int len)
 
 /* --------------------------------------------------------------- */
 
-#if 0 /* XXX TBD */
+#if 0 /* TODO: byte buffer */
 
 int
 mls_type_bbuf_setup(struct mls_type_bbuf **bbuf, unsigned char *buf, int buflen)
@@ -133,4 +133,4 @@ int mls_type_bbuf_push_int(struct mls_type_bbuf *bbuf, unsigned int data);
 
 int mls_type_bbuf_seek(struct mls_type_bbuf *bbuf, unsigned int pos);
 int mls_type_bbuf_reset(struct mls_type_bbuf *bbuf);
-#endif /* XXX TBD */
+#endif /* TODO: byte buffer */

@@ -10,7 +10,7 @@
  * ECHONET Lite Node
  */
 struct mls_node {
-    /* XXX Address, ... */
+    /* TODO: Node address, ... */
     struct mls_eoj *prof;  /* profile object */
     mls_dlink_t eojs_list; /* struct mls_obj list */
 };

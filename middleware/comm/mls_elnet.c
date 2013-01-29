@@ -13,6 +13,53 @@ static struct mls_elnet _lelnet;
 static unsigned char _req[MLS_ELNET_FRAME_LENGTH_MAX];
 static unsigned char _res[MLS_ELNET_FRAME_LENGTH_MAX];
 
+/***************************************************************/
+
+/* TODO: 設定で切り替え可能にする */
+static int _is_packet_hex_dump = 1;
+
+static ssize_t
+SENDTO(int sockfd, const void *buf, size_t len, int flags,
+    const struct sockaddr *dest_addr, socklen_t addrlen)
+{
+    ssize_t slen;
+    if (_is_packet_hex_dump) {
+        /* TODO: refine hex dump log */
+        fprintf(stderr, "[SEND]: len=%d\n", (int)len);
+        mls_log_hexdump((char*)buf, len, stderr);
+    }
+
+    slen = sendto(sockfd, buf, len, flags, dest_addr, addrlen);
+    return slen;
+}
+
+static ssize_t
+RECVFROM(int sockfd, void *buf, size_t len, int flags,
+    struct sockaddr *from, socklen_t *addrlen)
+{
+    ssize_t rlen;
+    rlen = recvfrom(sockfd, buf, len, flags, from, addrlen);
+    if ((0 < rlen) && _is_packet_hex_dump) {
+        /* TODO: refine hex dump log */
+        fprintf(stderr, "[RECV]: len=%d,\n", (int)rlen);
+#if 1
+        {
+            char hbuf[NI_MAXHOST], sbuf[NI_MAXSERV];
+            getnameinfo((struct sockaddr *)&from, *addrlen,
+                hbuf, sizeof(hbuf),
+                sbuf, sizeof(sbuf),
+                NI_NUMERICHOST | NI_NUMERICSERV);
+            fprintf(stderr, "[RECV]: %s:%s:len=%d\n", hbuf, sbuf, (int)len);
+        }
+#endif
+        mls_log_hexdump((char*)buf, rlen, stderr);
+    }
+
+    return rlen;
+}
+
+/***************************************************************/
+
 /*
   @arg ifname  ex."eth0" -or- "192.168.11.131" ....
  */
@@ -30,7 +77,8 @@ mls_elnet_init(char *ifname)
         ret =
             mls_net_getaddr_by_ifname(ifname, AF_INET, ifaddr, sizeof(ifaddr));
         if (0 != ret) {
-            fprintf(stderr, "mls_net_getaddr_by_ifname(%d) error.\n", ret);
+            LOG_ERR(MLS_LOG_DEFAULT_MODULE, 
+                "mls_net_getaddr_by_ifname(%d) error.\n", ret);
             goto out;
         }
     }
@@ -38,7 +86,8 @@ mls_elnet_init(char *ifname)
         mls_net_mcast_srv_open(MLS_ELNET_MCAST_ADDRESS, MLS_ELNET_MCAST_PORT,
             ifaddr);
     if (NULL == srv) {
-        fprintf(stderr, "mls_net_mcast_srv_open() error.\n");
+        LOG_ERR(MLS_LOG_DEFAULT_MODULE, 
+            "mls_net_mcast_srv_open() error.\n");
         goto out;
     }
 
@@ -84,7 +133,7 @@ _check_frame_header(struct mls_elnet_frame *header, int len)
     int ret = 0;
 
     if (len < MLS_ELNET_FRAME_HEADER_LENGTH) {
-        /* XXXX error log */
+        LOG_WARN(MLS_LOG_DEFAULT_MODULE, "invalid frame length = %d", len);
         ret = -1;
         goto out;
     }
@@ -92,7 +141,8 @@ _check_frame_header(struct mls_elnet_frame *header, int len)
     if ((MLS_ELNET_EHD1_ECHONET_LITE != header->ehd1) ||
         (MLS_ELNET_EHD2_REGULAR != header->ehd1))
     {
-        /* XXXX error log */
+        LOG_WARN(MLS_LOG_DEFAULT_MODULE,
+            "invalid frame header = %d,%d", header->ehd1, header->ehd1);
         ret = -1;
         goto out;
     }
@@ -165,6 +215,9 @@ _set_properties(struct mls_el_ctx *ctx,
     node = mls_el_get_node(ctx) ;
     eoj = mls_el_node_get_device(node, &(reqp->deoj));
     if (NULL == eoj) {
+        LOG_INFO(MLS_LOG_DEFAULT_MODULE,
+            "not found deoj(%d,%d,%d)\n",
+            reqp->deoj.cgc, reqp->deoj.clc, reqp->deoj.inc);
         ret = -1; /* not found deoj */
         goto out;
     }
@@ -176,6 +229,7 @@ _set_properties(struct mls_el_ctx *ctx,
         struct mls_epr* epr;
 
         if (reqd_len < 2) {
+            LOG_WARN(MLS_LOG_DEFAULT_MODULE, "invalid epc,pdc(%d)\n", reqd_len);
             ret = -1; /* invalid packet */
             goto out;
         }
@@ -183,6 +237,8 @@ _set_properties(struct mls_el_ctx *ctx,
         pdc = reqd[1];
         reqd += 2; reqd_len -= 2;
         if (reqd_len < pdc) {
+            LOG_WARN(MLS_LOG_DEFAULT_MODULE, 
+                "invalid edt(%d,%d)\n", reqd_len, pdc);
             ret = -1; /* invalid packet */
             goto out;
         }
@@ -190,10 +246,13 @@ _set_properties(struct mls_el_ctx *ctx,
         /* set property */
         epr = mls_eoj_get_property(eoj, epc);
         if (NULL == epr) {
+            LOG_WARN(MLS_LOG_DEFAULT_MODULE, "not found epr(%d)\n", epc);
             ret_prop = -1;
             goto set_res;
         }
         if (!(epr->access_attr & MLS_EPR_ACCESS_SET) || (NULL == epr->setf)) {
+            LOG_WARN(MLS_LOG_DEFAULT_MODULE,
+                "cannot access(%d,%d,%x)\n", epc, epr->access_attr, epr->setf);
             ret_prop = -1;
             goto set_res;
         }
@@ -242,6 +301,9 @@ _get_properties(struct mls_el_ctx *ctx,
     node = mls_el_get_node(ctx) ;
     eoj = mls_el_node_get_device(node, &(reqp->deoj));
     if (NULL == eoj) {
+        LOG_INFO(MLS_LOG_DEFAULT_MODULE,
+            "not found deoj(%d,%d,%d)\n",
+            reqp->deoj.cgc, reqp->deoj.clc, reqp->deoj.inc);
         ret = -1; /* not found deoj */
         goto out;
     }
@@ -255,6 +317,7 @@ _get_properties(struct mls_el_ctx *ctx,
         unsigned char tmp[UCHAR_MAX];
 
         if (reqd_len < 2) {
+            LOG_WARN(MLS_LOG_DEFAULT_MODULE, "invalid epc,pdc(%d)\n", reqd_len);
             ret = -1; /* invalid packet */
             goto out;
         }
@@ -262,6 +325,8 @@ _get_properties(struct mls_el_ctx *ctx,
         pdc = reqd[1];
         reqd += 2; reqd_len -= 2;
         if (0 != pdc) {
+            LOG_WARN(MLS_LOG_DEFAULT_MODULE, 
+                "invalid edt(%d,%d)\n", epc, pdc);
             ret = -1; /* invalid packet */
             goto out;
         }
@@ -269,10 +334,13 @@ _get_properties(struct mls_el_ctx *ctx,
         /* get property */
         epr = mls_eoj_get_property(eoj, epc);
         if (NULL == epr) {
+            LOG_WARN(MLS_LOG_DEFAULT_MODULE, "not found epr(%d)\n", epc);
             ret_prop = -1;
             goto set_res;
         }
         if (!(epr->access_attr & MLS_EPR_ACCESS_GET) || (NULL == epr->getf)) {
+            LOG_WARN(MLS_LOG_DEFAULT_MODULE,
+                "cannot access(%d,%d,%x)\n", epc, epr->access_attr, epr->getf);
             ret_prop = -1;
             goto set_res;
         }
@@ -305,7 +373,7 @@ _setget_properties(struct mls_el_ctx *ctx,
     struct mls_elnet_frame* req, unsigned int reqlen,
     unsigned char *res, unsigned int *reslen)
 {
-    /* XXXXXX not impl */
+    /* TODO: XXXX not impl */
     return -1;
 }
 
@@ -323,6 +391,9 @@ _inf_properties(struct mls_el_ctx *ctx,
     node = mls_el_get_node(ctx) ;
     eoj = mls_el_node_get_device(node, &(reqp->deoj));
     if (NULL == eoj) {
+        LOG_INFO(MLS_LOG_DEFAULT_MODULE,
+            "not found deoj(%d,%d,%d)\n",
+            reqp->deoj.cgc, reqp->deoj.clc, reqp->deoj.inc);
         ret = -1; /* not found deoj XXXX */
         goto out;
     }
@@ -332,18 +403,21 @@ _inf_properties(struct mls_el_ctx *ctx,
         unsigned char epc, pdc;
 
         if (reqd_len < 2) {
-            ret = -1; /* invalid packet XXXX */
+            LOG_WARN(MLS_LOG_DEFAULT_MODULE, "invalid epc,pdc(%d)\n", reqd_len);
+            ret = -1; /* invalid packet */
             goto out;
         }
         epc = reqd[0];
         pdc = reqd[1];
         reqd += 2; reqd_len -= 2;
         if (reqd_len < pdc) {
-            ret = -1; /* invalid packet XXXX */
+            LOG_WARN(MLS_LOG_DEFAULT_MODULE, 
+                "invalid edt(%d,%d)\n", reqd_len, pdc);
+            ret = -1; /* invalid packet */
             goto out;
         }
 
-        /* XXXXXX
+        /* TODO: XXXX
            仮想ノード(proxy)機能をサポートしないと意味がない
            とりあえず、処理した事だけを返す。
          */
@@ -379,12 +453,16 @@ _handle_message(struct mls_el_ctx *ctx,
     ret = _check_frame_header(req, _reqlen);
     if (ret < 0) {
         /* ignore message */
+        LOG_WARN(MLS_LOG_DEFAULT_MODULE, 
+            "_check_frame_header(%d) ignore message.\n", ret);
         goto out;
     }
 
     switch(req->esv) {
     default:
-        /* ignore message XXXX error log */
+        /* ignore message & error log */
+        LOG_WARN(MLS_LOG_DEFAULT_MODULE, 
+            "invalid esv(%d), ignore message.\n", req->esv);
         ret = -1;
         break;
 
@@ -407,7 +485,7 @@ _handle_message(struct mls_el_ctx *ctx,
     case MLS_ELNET_ESV_INF:  /* don't need response */
     case MLS_ELNET_ESV_INFC_Res: /* INFC response */
     case MLS_ELNET_ESV_SetGet_Res:
-        /* ignore message XXXX error log */
+        /* ignore message */
         ret = -1;
         break;
     case MLS_ELNET_ESV_INFC: /* spontaneous */
@@ -420,7 +498,9 @@ _handle_message(struct mls_el_ctx *ctx,
     case MLS_ELNET_ESV_Get_SNA:
     case MLS_ELNET_ESV_INF_SNA:
     case MLS_ELNET_ESV_SetGet_SNA:
-        /* ignore message XXXX error log */
+        /* ignore message & error log */
+        LOG_WARN(MLS_LOG_DEFAULT_MODULE, 
+            "recv error response(%d), ignore message.\n", req->esv);
         ret = -1;
         break;
     }
@@ -433,10 +513,12 @@ _handle_message(struct mls_el_ctx *ctx,
      */
     /* not found eoj -or- discard message type */
     if (-1 == ret) {
+        LOG_INFO(MLS_LOG_DEFAULT_MODULE, "ignore message.\n");
         goto out;
     }
     /* don't need response message */
     if ((MLS_ELNET_ESV_SetI == req->esv) && (ret == 0)) {
+        LOG_INFO(MLS_LOG_DEFAULT_MODULE, "ignore message.\n");
         ret = -1;
         goto out;
     }
@@ -476,11 +558,15 @@ mls_elnet_announce_property(struct mls_elnet *elnet,
 
     {
         int ret;
-        ret = sendto(elnet->srv->sock, tmp, reqlen, 0,
+        ret = SENDTO(elnet->srv->sock, req, reqlen, 0,
             (struct sockaddr*)&(elnet->srv->to), elnet->srv->tolen);
         if (-1 == ret) {
-            /* XXXX error log */
-            perror("sendto@mls_elnet_announce_profile()");
+            LOG_ERR(MLS_LOG_DEFAULT_MODULE,
+                "sendto(%d): %s.\n", errno, strerror(errno));
+        } else {
+            LOG_INFO(MLS_LOG_DEFAULT_MODULE,
+                "mls_elnet_announce_property(%d,%d,%d %d,%d).\n",
+                deojc->cgc, deojc->clc, deojc->inc, epc, pdc);
         }
     }
 }
@@ -506,11 +592,14 @@ mls_elnet_announce_profile(struct mls_elnet *elnet, struct mls_node *node)
 
     {
         int ret;
-        ret = sendto(elnet->srv->sock, (char *)req, reqlen, 0,
+        ret = SENDTO(elnet->srv->sock, (char *)req, reqlen, 0,
             (struct sockaddr*)&(elnet->srv->to), elnet->srv->tolen);
         if (-1 == ret) {
-            /* XXXX error log */
-            perror("sendto@mls_elnet_announce_profile()");
+            LOG_ERR(MLS_LOG_DEFAULT_MODULE,
+                "sendto(%d): %s.\n", errno, strerror(errno));
+        } else {
+            LOG_INFO(MLS_LOG_DEFAULT_MODULE,
+                "mls_elnet_announce_profile().\n");
         }
     }
 }
@@ -534,50 +623,29 @@ mls_elnet_event_handler(struct mls_evt* evt, void* tag)
 
     /* Request */
     fromlen = sizeof(from);
-    len = recvfrom(sock, req, len, 0, 
+    len = RECVFROM(sock, req, len, 0, 
         (struct sockaddr*)&from, &fromlen);
     if (-1 == len) {
-        /* XXXX error log */
-        perror("recvfrom");
+        LOG_ERR(MLS_LOG_DEFAULT_MODULE,
+            "recvfrom(%d): %s.\n", errno, strerror(errno));
         return;
 #if 0
         if (EAGAIN == errno)
             goto recv;
 #endif
     }
-#if 0 /* check */
-    else {
-        char hbuf[NI_MAXHOST], sbuf[NI_MAXSERV];
-        getnameinfo((struct sockaddr *)&from, fromlen,
-            hbuf, sizeof(hbuf),
-            sbuf, sizeof(sbuf),
-            NI_NUMERICHOST | NI_NUMERICSERV);
-        fprintf(stdout, "recvfrom:%s:%s:len=%d\n", hbuf, sbuf, (int)len);
-    }
-#endif
-#if 1
-    {
-        fprintf(stdout, "[REQ]:len=%d\n", (int)len);
-        mls_log_hexdump((char*)req, len, stdout);
-    }
-#endif
 
     if (_handle_message(ctx, req, len, res, &reslen) < 0) {
+        LOG_INFO(MLS_LOG_DEFAULT_MODULE,
+            "_handle_message(): don't need response.\n");
         return; /* don't need response */
     }
 
-#if 1
-    {
-        fprintf(stdout, "[RES]:len=%d\n", (int)reslen);
-        mls_log_hexdump((char*)res, reslen, stdout);
-    }
-#endif
-
     /* Response */
-    len = sendto(sock, res, reslen, 0, (struct sockaddr*)&from, fromlen);
+    len = SENDTO(sock, res, reslen, 0, (struct sockaddr*)&from, fromlen);
     if (-1 == len) {
-        /* XXXX error log */
-        perror("sendto");
+        LOG_ERR(MLS_LOG_DEFAULT_MODULE,
+            "sendto(%d): %s.\n", errno, strerror(errno));
         return;
     }
 }
@@ -591,6 +659,8 @@ _unmarshal_frame_response(struct mls_elnet_frame *req,
     /* check header */
     ret = _check_frame_header(res, reslen);
     if (ret < 0) {
+        LOG_WARN(MLS_LOG_DEFAULT_MODULE,
+            "_check_frame_header(%d)\n", ret);
         goto out;
     }
 
@@ -599,7 +669,8 @@ _unmarshal_frame_response(struct mls_elnet_frame *req,
     res->tid = mls_type_get_short(&(res->tid), 2);
 #endif
     if (req->tid != res->tid) {
-        /* XXXX error log */
+        LOG_WARN(MLS_LOG_DEFAULT_MODULE,
+            "differ transaction id(%d,%d)\n", req->tid, res->tid);
         ret = -1;
         goto out;
     }
@@ -608,21 +679,28 @@ _unmarshal_frame_response(struct mls_elnet_frame *req,
     if (!mls_eoj_equal_eojc(&(req->seoj), &(res->deoj)) ||
         !mls_eoj_equal_eojc(&(req->deoj), &(res->seoj)))
     {
-        /* XXXX error log */
+        LOG_WARN(MLS_LOG_DEFAULT_MODULE,
+            "differ eojc(%d,%d,%d-%d,%d,%d != %d,%d,%d-%d,%d,%d)\n",
+            req->seoj.cgc,req->seoj.clc,req->seoj.inc,
+            req->deoj.cgc,req->deoj.clc,req->deoj.inc,
+            res->seoj.cgc,res->seoj.clc,res->seoj.inc,
+            res->deoj.cgc,res->deoj.clc,res->deoj.inc);
         ret = -1;
         goto out;
     }
 
     /* check esv */
-    if ((req->esv & 0xF) != (res->esv & 0xF)) {
-        /* XXXX error log */
+    if ((req->esv & 0x0F) != (res->esv & 0x0F)) {
+        LOG_WARN(MLS_LOG_DEFAULT_MODULE,
+            "differ esv(%d,%d)\n", req->esv, res->esv);
         ret = -1;
         goto out;
     }
     
     /* check opc */
     if (req->opc != res->opc) {
-        /* XXXX error log */
+        LOG_WARN(MLS_LOG_DEFAULT_MODULE,
+            "differ opc(%d,%d)\n", req->opc, res->opc);
         ret = -1;
         goto out;
     }
@@ -660,7 +738,8 @@ mls_elnet_rpc(struct mls_net_mcast_cln *cln, char *addr, char *port,
 
     if (NULL != addr) {
         if ((ret = mls_net_get_sockaddr_info(addr, port, &to, &tolen)) < 0) {
-            fprintf(stderr, "mls_net_get_sockaddr_info:%s\n", strerror(errno));
+            LOG_ERR(MLS_LOG_DEFAULT_MODULE,
+                "mls_net_get_sockaddr_info:%d,%s\n", errno, strerror(errno));
             goto out;
         }
         top = &to;
@@ -677,13 +756,12 @@ mls_elnet_rpc(struct mls_net_mcast_cln *cln, char *addr, char *port,
         fd_set ready;
         struct timeval timeout;
 
-        /* send request */
-        ret = sendto(sock, (char*)req, reqlen, 0,
+        ret = SENDTO(sock, (char*)req, reqlen, 0,
             (struct sockaddr*)&top, tolen);
         if (-1 == ret) {
-            /* XXXX error log */
             ret = -errno;
-            perror("sendto");
+            LOG_ERR(MLS_LOG_DEFAULT_MODULE,
+                "sendto(%d,%s)\n", errno, strerror(errno));
             goto out;
         }
 
@@ -694,7 +772,8 @@ mls_elnet_rpc(struct mls_net_mcast_cln *cln, char *addr, char *port,
         switch (select(width, (fd_set*)&ready, NULL, NULL, &timeout)) {
         case -1:
             ret = -errno;
-            perror("select");
+            LOG_ERR(MLS_LOG_DEFAULT_MODULE,
+                "select(%d,%s)\n", errno, strerror(errno));
             goto out;
         case 0:
             /* timeout, retry */
@@ -706,26 +785,30 @@ mls_elnet_rpc(struct mls_net_mcast_cln *cln, char *addr, char *port,
 
                 /* recv response */
                 cln->fromlen = sizeof(cln->from);
-                if ((len = recvfrom(sock, res, reslen, 0,
+                if ((len = RECVFROM(sock, res, reslen, 0,
                             (struct sockaddr*)&(cln->from),
                             &(cln->fromlen))) == -1)
                 {
-                    /* XXXX error log */
                     ret = -errno;
-                    perror("recvfrom");
+                    LOG_ERR(MLS_LOG_DEFAULT_MODULE,
+                        "recvfrom(%d,%s)\n", errno, strerror(errno));
                     goto out;
                 }
 
                 /* un-marshal response */
                 ret = _unmarshal_frame_response(req, res, len);
                 if (ret < 0) {
-                    /* ignore message retry, XXXX error log */
+                    /* ignore message retry, error log */
+                    LOG_WARN(MLS_LOG_DEFAULT_MODULE,
+                        "_unmarshal_frame_response(%d), ignore message\n", ret);
                     i--;
                     continue;
                 }
 
                 /* OK, response packet */
                 ret = len;
+                LOG_ERR(MLS_LOG_DEFAULT_MODULE,
+                    "message rpc, ok(%d,%d)\n", i, ret);
                 goto out;
             }
             break;
@@ -734,6 +817,7 @@ mls_elnet_rpc(struct mls_net_mcast_cln *cln, char *addr, char *port,
 
     /* retry over */
     ret = -1;
+    LOG_ERR(MLS_LOG_DEFAULT_MODULE, "message rpc, retry over(%d,%d)\n", i, ret);
 
 out:
     return ret;

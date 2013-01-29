@@ -23,19 +23,19 @@
 #include "mls_net.h"
 
 #if defined(CDEBUG)
-#define CDBG(fmt, ...) do{                   \
+#define CDBG(fmt, ...) do{                    \
         fprintf(stderr, fmt, ##__VA_ARGS__);  \
   }while(0)
 #else 
 #define CDBG(...) do{}while(0)
 #endif
 
-/* XXX replace mls_log API */
-#define errlog(fmt, ...) do{                  \
-        fprintf(stderr, fmt, ##__VA_ARGS__);  \
+#define errlog(fmt, ...) do{                   \
+        LOG_ERR(MLS_LOG_DEFAULT_MODULE, fmt, ##__VA_ARGS__);      \
   }while(0)
+/* TODO: replace mls_log API */
 #define showlog(fmt, ...) do{                  \
-        fprintf(stdout, fmt, ##__VA_ARGS__);  \
+        fprintf(stdout, fmt, ##__VA_ARGS__);   \
   }while(0)
 
 /* ######################################################################## */

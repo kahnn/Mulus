@@ -18,6 +18,13 @@ remote-host = ipaddr:port
 #include "mls_type.h"
 #include "mls_elnet.h"
 
+#define errlog(fmt, ...) do{                   \
+        fprintf(stderr, fmt, ##__VA_ARGS__);      \
+  }while(0)
+#define showlog(fmt, ...) do{                   \
+        fprintf(stdout, fmt, ##__VA_ARGS__);      \
+  }while(0)
+
 /**********************************************************************/
 int _run_mode; /* -s=1 -or -g=0 */
 char *_remote_host;
@@ -38,7 +45,7 @@ static unsigned char _res[MLS_ELNET_FRAME_LENGTH_MAX];
 void
 usage(char *name)
 {
-    fprintf(stderr, "Usage: %s {-s|-g} remote-host cgc clc inc epc [value]\n", name);
+    errlog("Usage: %s {-s|-g} remote-host cgc clc inc epc [value]\n", name);
     exit(-1);
 }
 
@@ -69,11 +76,11 @@ output_data(unsigned char epc, unsigned char *datap, unsigned int datalen)
 {
     int i;
 
-    fprintf(stdout, "%02x,", epc);
+    showlog("%02x,", epc);
     for (i = 0; i < datalen; i++) {
-        fprintf(stdout, "%02x", *(datap + i));
+        showlog("%02x", *(datap + i));
     }
-    fprintf(stdout, "\n");
+    showlog("\n");
 }
 
 static void
@@ -107,7 +114,7 @@ parse_args(int argc, char* argv[])
     }
 
 #if 1
-    fprintf(stderr, "%d:%s:%x,%x,%x:%x,%s\n",
+    errlog("%d:%s:%x,%x,%x:%x,%s\n",
         _run_mode, _remote_host, 
         _eoj_code.cgc, _eoj_code.clc, _eoj_code.inc, _epc, _epc_val);
 #endif
@@ -125,16 +132,16 @@ open_sock(char *ifname)
     ret = mls_net_getaddr_by_ifname(ifname, AF_INET, 
         ifaddr, sizeof(ifaddr));
     if (0 != ret) {
-        fprintf(stderr, "mls_net_getaddr_by_ifname(%d) error.\n", ret);
+        errlog("mls_net_getaddr_by_ifname(%d) error.\n", ret);
         goto out;
     }
-    fprintf(stdout, "ifaddr => %s\n", ifaddr);
+    errlog("ifaddr => %s\n", ifaddr);
 
     _cln_ctx = 
         mls_net_mcast_cln_open(MLS_ELNET_MCAST_ADDRESS,
             MLS_ELNET_MCAST_PORT, ifaddr, "0");
     if (NULL == _cln_ctx) {
-        fprintf(stderr, "mls_net_mcast_cln_open() error.\n");
+        errlog("mls_net_mcast_cln_open() error.\n");
         ret = -1;
         goto out;
     }
@@ -152,7 +159,7 @@ parse_addr(char *host, char **addr, char **port)
     *addr = strtok_r(host, ":", &saveptr);
     *port = strtok_r(NULL, ":", &saveptr);
     if (NULL == *addr || NULL == *port) {
-        fprintf(stderr, "inavlid host format:%s\n", host);
+        errlog("inavlid host format:%s\n", host);
         ret = -1;
         goto out;
     }
@@ -202,7 +209,7 @@ command(void)
     /* RPC */
     reslen = mls_elnet_rpc(_cln_ctx, addr, port, req, reqlen, res, reslen);
     if (reslen < 0) {
-        /* XXXX error */
+        errlog("Error mls_elnet_rpc(%d)\n", reslen);
         ret = -1;
         goto out;
     }
@@ -214,6 +221,7 @@ command(void)
     output_data(_epc,
         ((_run_mode) ? _epc_rawdata : &(res->data[0])),
         ((_run_mode) ? _epc_rawdata_len : (res->data[1])));
+    ret = 0;
 
 out:
     return ret;

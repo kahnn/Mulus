@@ -184,7 +184,7 @@ void mls_conf_store(struct mls_conf* conf)
     FILE* fp;
     struct mls_conf_prop *pp;
 
-    // XXXX Backup & Restore
+    // TODO: Backup & Restore
     if (NULL == (fp = fopen(conf->path, "w"))) {
         MLS_FATAL_PERROR("Property file '%s' open failed", conf->path);
     }
@@ -268,93 +268,3 @@ out:
     }
     return ret;
 }
-
-#if 0
-////////////////////////////////////////////
-////////////////////////////////////////////
-////////////////////////////////////////////
-
-void
-prop_init(char* path)
-{
-    FILE* fp;
-    char linebuf[256];
-    int lineno = 0;
-
-    fp = fopen(path, "r");
-    if(NULL == fp){
-        fatalperror("Property file '%s' open failed", path);
-    }
-
-    while(NULL != fgets(linebuf, sizeof(linebuf)-1, fp)){
-        char* cp = linebuf;
-        char* savep;
-        prop_t* pp;
-
-        lineno += 1;
-        linebuf[sizeof(linebuf)-1] = '\0';
-
-        while('\0' != *cp && isspace(*cp)){
-            cp += 1; /* 先頭の空白文字をスキップする */
-        }
-
-        if('\0' == *cp || '#' == *cp){
-            continue; /* 空白行もしくはコメント行 */
-        }
-
-        savep = cp;
-        while('\0' != *cp && !isspace(*cp) && ':' != (*cp)){
-            cp += 1; /* キー文字列を走査する */
-        }
-        if('\0' == *cp){
-        no_value:
-            fprintf(stderr, "No value for key '%s', %s@%d\n", 
-                savep, path, lineno);
-            continue;
-        }
-
-        if(':' != *cp){
-            *cp = '\0';
-            cp += 1;
-
-            while(':' != *cp && '\0' != *cp){
-                cp += 1;
-            }
-            if('\0' == *cp){
-                fprintf(stderr, "No ':' for key '%s', %s@%d\n", 
-                    savep, path, lineno);
-                continue;
-            }
-        }
-        else{
-            *cp = '\0';
-        }
-
-        cp += 1;
-        while('\0' != *cp && isspace(*cp)){
-            cp += 1; /* 値の前の空白文字をスキップする */
-        }
-        if('\0' == *cp){
-            goto no_value;
-        }
-
-        pp = malloc(sizeof(*pp));
-        pp->p_next = NULL;
-        pp->p_key = strdup(savep);
-
-        savep = cp;
-        cp = savep + strlen(cp) - 1;
-        while(cp > savep && isspace(*cp)){
-            cp -= 1;
-        }
-        cp[1] = '\0';
-        pp->p_value = strdup(savep);
-
-        pp->p_next = root;
-        root = pp;
-        printf("%d: '%s' '%s'\n", lineno, pp->p_key, pp->p_value);
-    }
-
-    (void) fclose(fp);
-}
-#endif

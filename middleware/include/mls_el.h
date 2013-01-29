@@ -16,6 +16,8 @@
 
 struct mls_el_ctx;
 
+extern int mls_el_ini(void);
+extern void mls_el_fin(void);
 extern struct mls_el_ctx* mls_el_create_context(struct mls_node*, struct mls_elnet*, mls_evt_callback_t, void*);
 extern void mls_el_destroy_context(struct mls_el_ctx*);
 extern void mls_el_announce_profile(struct mls_el_ctx*);

@@ -31,7 +31,7 @@ static struct
     { MLS_LOG_NONE, "NONE"},
 };
 
-static FILE* _outfp;
+static FILE* _outfp; /* default logging file */
 
 static inline char*
 _get_lvname(enum mls_log_level level)
@@ -50,14 +50,14 @@ _get_modname(int mod)
 static inline FILE*
 _open_file(char *path)
 {
-    /* XXXX Check path & open file */
+    /* TODO: XXXX Check path & open file */
     return stderr;
 }
 
 static inline void
 _close_file(FILE* fp)
 {
-    /* XXXXC Close file */
+    /* TODO: XXXXC Close file */
 #if 0
     fclose(fp);
 #endif

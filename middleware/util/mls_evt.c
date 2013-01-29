@@ -30,7 +30,6 @@ mls_evt_ini(int timeout)
 
     evt = malloc(sizeof(struct mls_evt));
     if (NULL == evt) {
-        // XXX logging
         goto out;
     }
 
@@ -77,7 +76,6 @@ mls_evt_add_handle(struct mls_evt *evt,
 
     handle = malloc(sizeof(struct mls_evt_handle));
     if (NULL == handle) {
-        // XXX logging
         ret = -errno;
         goto out;
     }
@@ -140,14 +138,14 @@ void
 mls_evt_timeout(struct mls_evt *evt, int timeout)
 {
     evt->timeout = timeout;
-    /* XXX interrupt sleep at select. */
+    /* TODO: interrupt sleep at select(). */
 }
 
 void
 mls_evt_deactivate(struct mls_evt *evt)
 {
     evt->is_active = 0;
-    /* XXX interrupt sleep at select. */
+    /* TODO: interrupt sleep at select. */
 }
 
 static void
@@ -193,7 +191,7 @@ mls_evt_dispatch(struct mls_evt *evt)
                 (0 <= evt->timeout) ? &timeout : NULL);
         switch (nfd) {
         case -1:
-            perror("select"); /* XXXX error handling */
+            perror("select"); /* TODO: error handling */
             break;
         case 0:  /* timeout */
         default: /* fire event */

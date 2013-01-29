@@ -3,7 +3,7 @@
 #include "mls_dlink.h"
 #include "mls_node.h"
 
-/* XXXX local node only, fix for other nodes. */
+/* TODO: XXXX local node only, fix for other nodes. */
 static struct mls_node lnode;
 
 struct mls_node*

@@ -11,7 +11,7 @@ extern char mls_type_get_char(unsigned char* buf, unsigned int len);
 extern short mls_type_get_short(unsigned char* buf, unsigned int len);
 extern int mls_type_get_int(unsigned char* buf, unsigned int len);
 
-#if 0 /* XXX TBD */
+#if 0 /* TODO: byte buffer */
 #define MLS_TYPE_BBUF_BUFFER_ALLOCATED  (0x01)
 #define MLS_TYPE_BBUF_CONTEXT_ALLOCATED (0x02)
 
@@ -34,6 +34,6 @@ extern int mls_type_bbuf_push_short(struct mls_type_bbuf *bbuf, unsigned short d
 extern int mls_type_bbuf_push_int(struct mls_type_bbuf *bbuf, unsigned int data);
 extern int mls_type_bbuf_seek(struct mls_type_bbuf *bbuf, unsigned int pos);
 extern int mls_type_bbuf_reset(struct mls_type_bbuf *bbuf);
-#endif /* XXX TBD */
+#endif /* TODO: byte buffer */
 
 #endif /* _MULUS_TYPE_H_ */

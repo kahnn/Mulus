@@ -4,6 +4,7 @@
 #include <ctype.h>
 #include <errno.h>
 
+#include "mls_log.h"
 #include "mls_el.h"
 
 struct mls_el_ctx {
@@ -15,7 +16,7 @@ struct mls_el_ctx {
     void *tag;
 };
 
-struct mls_el_ctx lctx; /* XXX */
+struct mls_el_ctx lctx;
 
 /* ------------------------------------------------------ */
 
@@ -77,21 +78,24 @@ _set_event(struct mls_el_ctx *ctx)
     ret = mls_evt_add_handle(evt, MLS_EVT_TIMEOUT, 0 /* timeout key=0 */,
         _timeinterval_handler, ctx);
     if (ret < 0) {
-        fprintf(stderr, "ERROR: mls_evt_add_handle(TI,%d)\n", ret);
+        LOG_ERR(MLS_LOG_DEFAULT_MODULE, 
+            "mls_evt_add_handle(timeout,%d)\n", ret);
         goto out;
     }
     /* operation command */
     ret = mls_evt_add_handle(evt, MLS_EVT_FD, ctx->elope->srv->sock,
         mls_elope_event_handler, ctx);
     if (ret < 0) {
-        fprintf(stderr, "ERROR: mls_evt_add_handle(OPE,%d)\n", ret);
+        LOG_ERR(MLS_LOG_DEFAULT_MODULE, 
+            "mls_evt_add_handle(operation,%d)\n", ret);
         goto out;
     }
     /* EL multicat */
     ret = mls_evt_add_handle(evt, MLS_EVT_FD, ctx->elnet->srv->sock,
         mls_elnet_event_handler, ctx);
     if (ret < 0) {
-        fprintf(stderr, "ERROR: mls_evt_add_handle(NET,%d)\n", ret);
+        LOG_ERR(MLS_LOG_DEFAULT_MODULE, 
+            "mls_evt_add_handle(multicast,%d)\n", ret);
         goto out;
     }
 
@@ -120,7 +124,8 @@ mls_el_create_context(struct mls_node *local_node,
     lctx.tag = tag;
 
     if (_set_event(&lctx) < 0) {
-        /* XXX error handling, resource free... */
+        /* TODO: error handling, resource free... */
+        LOG_ERR(MLS_LOG_DEFAULT_MODULE, "event setting error.\n");
         goto out;
     }
 
@@ -137,7 +142,7 @@ mls_el_destroy_context(struct mls_el_ctx* ctx)
     ctx->evt = NULL;
     mls_elope_term(ctx->elope);
     ctx->elope = NULL;
-    /* XXXX other finish */
+    /* TODO: other finish */
 }
 
 void
@@ -151,4 +156,24 @@ mls_el_run_context(struct mls_el_ctx* ctx)
 {
     mls_evt_dispatch(ctx->evt);
     return;
+}
+
+int
+mls_el_ini(void)
+{
+    int ret = 0;
+
+    /* TODO: エラー確認とファイル指定を設定ファイルで行えるようにする */
+    (void)mls_log_ini("stderr", (32*1024), MLS_LOG_WARN, 3);
+    mls_log_set_module(MLS_LOG_DEFAULT_MODULE, "MLS", MLS_LOG_WARN);
+    LOG_INFO(MLS_LOG_DEFAULT_MODULE, "mls_el_ini() started.\n");
+
+    return ret;
+}
+
+void
+mls_el_fin(void)
+{
+    LOG_INFO(MLS_LOG_DEFAULT_MODULE, "mls_el_fin() finished.\n");
+    mls_log_fin();
 }

@@ -10,6 +10,13 @@
 #include "mls_type.h"
 #include "mls_elnet.h"
 
+#define errlog(fmt, ...) do{                   \
+        fprintf(stderr, fmt, ##__VA_ARGS__);      \
+  }while(0)
+#define showlog(fmt, ...) do{                   \
+        fprintf(stdout, fmt, ##__VA_ARGS__);      \
+  }while(0)
+
 /**********************************************************************/
 struct mls_eoj_code _cond_code;
 struct mls_net_mcast_cln* _cln_ctx = NULL;
@@ -20,7 +27,7 @@ static unsigned char _res[MLS_ELNET_FRAME_LENGTH_MAX];
 void
 usage(char *name)
 {
-    fprintf(stderr, "Usage: %s cgc clc inc\n", name);
+    errlog("Usage: %s cgc clc inc\n", name);
     exit(-1);
 }
 
@@ -36,7 +43,7 @@ parse_args(int argc, char* argv[])
     _cond_code.inc = (unsigned char)strtoul(argv[3], NULL, 0);
 
 #if 1
-    fprintf(stderr, "%x,%x,%x\n",
+    errlog("%x,%x,%x\n",
         _cond_code.cgc, _cond_code.clc, _cond_code.inc);
 #endif
 }
@@ -50,16 +57,16 @@ open_sock(char *ifname)
     ret = mls_net_getaddr_by_ifname(ifname, AF_INET, 
         ifaddr, sizeof(ifaddr));
     if (0 != ret) {
-        fprintf(stderr, "mls_net_getaddr_by_ifname(%d) error.\n", ret);
+        errlog("mls_net_getaddr_by_ifname(%d) error.\n", ret);
         goto out;
     }
-    fprintf(stdout, "ifaddr => %s\n", ifaddr);
+    errlog("ifaddr => %s\n", ifaddr);
 
     _cln_ctx = 
         mls_net_mcast_cln_open(MLS_ELNET_MCAST_ADDRESS,
             MLS_ELNET_MCAST_PORT, ifaddr, "0");
     if (NULL == _cln_ctx) {
-        fprintf(stderr, "mls_net_mcast_cln_open() error.\n");
+        errlog("mls_net_mcast_cln_open() error.\n");
         ret = -1;
         goto out;
     }
@@ -79,12 +86,11 @@ print_host(struct sockaddr_storage *from, socklen_t fromlen,
                 nbuf, sizeof(nbuf), sbuf, sizeof(sbuf),
                 NI_NUMERICHOST | NI_NUMERICSERV)) != 0)
     {
-        fprintf(stderr,
-            "getnameinfo():%s\n", gai_strerror(ret));
+        errlog("getnameinfo():%s\n", gai_strerror(ret));
         goto out;
     }
-    fprintf(stdout,
-        "%s:%s,0x%x,0x%x,0x%x\n", nbuf, sbuf, cond->cgc, cond->clc, cond->inc);
+    showlog("%s:%s,0x%x,0x%x,0x%x\n",
+        nbuf, sbuf, cond->cgc, cond->clc, cond->inc);
 out:
     return ret;
 }
@@ -147,19 +153,21 @@ command(void)
 rpc_exec:
     rpc_reslen = mls_elnet_rpc(_cln_ctx, NULL, NULL, req, reqlen, res, reslen);
     if (rpc_reslen < 0) {
-        /* XXXX error */
+        errlog("Error mls_elnet_rpc(%d)\n", rpc_reslen);
         ret = -1;
         goto out;
     }
 
     /* epc */
     if (MLS_EL_EPC_INSTANCE_LIST_NOTIFICATION != res->data[0]) {
-        /* ignore message retry, XXXX error log */
+        /* ignore message retry, error log */
+        errlog("ignore message retry(0, %d)\n", res->data[0]);
         goto rpc_exec;
     }
     /* pdc */
     if (res->data[1] == 0) {
-        /* ignore message retry, XXXX error log */
+        /* ignore message retry, error log */
+        errlog("ignore message retry(1, %d)\n", res->data[1]);
         goto rpc_exec;
     }
 
@@ -171,7 +179,8 @@ rpc_exec:
         ret = find_and_print_eoj(&(_cln_ctx->from), _cln_ctx->fromlen,
             &(res->data[2]), res->data[1], &_cond_code);
         if (ret != 0) {
-            /* ignore message retry, XXXX error log */
+            /* ignore message retry, error log */
+            errlog("ignore message retry(2, %d)\n", ret);
             goto rpc_exec;
         }
     }
