@@ -14,9 +14,11 @@ main(int ac, char *argv[])
 
     {
         char* data = "fedcba9876543210XYZ";
+        unsigned char data2[] = {0x01, 0x02, 0x11, 0x30, 0xfe, 0xfa, 0xa2};
         fprintf(stderr,
             "Address   |>>     8bytes      >>| |>>      8bytes     <<|  |>>  to char  <<|\n");
         mls_log_hexdump(data, strlen(data) + 1, stderr);
+        mls_log_hexdump((char *)data2, sizeof(data2), stderr);
     }
 
     {

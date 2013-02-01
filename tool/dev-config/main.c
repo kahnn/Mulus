@@ -12,6 +12,7 @@
 #include "mls_type.h"
 #include "mls_elnet.h"
 #include "mls_elope.h"
+#include "mls_el.h"
 
 #define errlog(fmt, ...) do{                   \
         fprintf(stderr, fmt, ##__VA_ARGS__);      \
@@ -83,7 +84,7 @@ static void
 parse_args(int argc, char* argv[])
 {
     int opt;
-    while ((opt = getopt(argc, argv, "sg:")) != -1) {
+    while ((opt = getopt(argc, argv, "sg")) != -1) {
         switch (opt) {
         case 'g':
             _run_mode = 0;
@@ -100,10 +101,10 @@ parse_args(int argc, char* argv[])
         usage(argv[0]);
     }
 
-    _eoj_code.cgc = (unsigned char)strtoul(argv[optind++], NULL, 0);
-    _eoj_code.clc = (unsigned char)strtoul(argv[optind++], NULL, 0);
-    _eoj_code.inc = (unsigned char)strtoul(argv[optind++], NULL, 0);
-    _epc = (unsigned char)strtoul(argv[optind++], NULL, 0);
+    _eoj_code.cgc = (unsigned char)strtoul(argv[optind++], NULL, 16);
+    _eoj_code.clc = (unsigned char)strtoul(argv[optind++], NULL, 16);
+    _eoj_code.inc = (unsigned char)strtoul(argv[optind++], NULL, 16);
+    _epc = (unsigned char)strtoul(argv[optind++], NULL, 16);
     if (_run_mode) {
         _epc_val = argv[optind++];
     }
@@ -198,6 +199,8 @@ main(int argc, char* argv[])
 {
     int ret = 0;
 
+    (void)mls_el_ini();
+
     parse_args(argc, argv);
 
     if ((ret = open_sock()) != 0) {
@@ -211,5 +214,7 @@ main(int argc, char* argv[])
 out:
     if (NULL != _cln_ctx)
         mls_net_udgram_cln_close(_cln_ctx);
+
+    mls_el_fin();
     return ret;
 }

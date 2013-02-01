@@ -141,7 +141,9 @@ mls_log_printf(int mod, enum mls_log_level level, const char* func, int line,
         _get_modname(mod), _get_lvname(level), func, line);
     va_start(ap, fmt);
     vfprintf(_outfp, fmt, ap);
+#if 0
     fprintf(_outfp, "\n");
+#endif
 }
 
 ///////////////////////////////////////////////////////////////
@@ -202,7 +204,7 @@ mls_log_hexdump(char* data, unsigned long size, FILE* outfp)
                 goto output;
             }
             ch = data[addr];
-            lpos += sprintf(lpos, "%02X", (unsigned int)ch);
+            lpos += sprintf(lpos, "%02X", ((unsigned char)ch & 0xff));
             dl = (7 == cpos) ? '-' : ' ';
             lpos += sprintf(lpos, "%c", dl);
 

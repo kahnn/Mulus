@@ -41,15 +41,16 @@ RECVFROM(int sockfd, void *buf, size_t len, int flags,
     rlen = recvfrom(sockfd, buf, len, flags, from, addrlen);
     if ((0 < rlen) && _is_packet_hex_dump) {
         /* TODO: refine hex dump log */
-        fprintf(stderr, "[RECV]: len=%d,\n", (int)rlen);
 #if 1
         {
             char hbuf[NI_MAXHOST], sbuf[NI_MAXSERV];
-            getnameinfo((struct sockaddr *)&from, *addrlen,
+            getnameinfo((struct sockaddr *)from, *addrlen,
                 hbuf, sizeof(hbuf),
                 sbuf, sizeof(sbuf),
                 NI_NUMERICHOST | NI_NUMERICSERV);
-            fprintf(stderr, "[RECV]: %s:%s:len=%d\n", hbuf, sbuf, (int)len);
+            fprintf(stderr,
+                "[RECV]: %s:%s:rlen/len=%d/%d\n",
+                hbuf, sbuf, (int)rlen, (int)len);
         }
 #endif
         mls_log_hexdump((char*)buf, rlen, stderr);
@@ -139,10 +140,10 @@ _check_frame_header(struct mls_elnet_frame *header, int len)
     }
 
     if ((MLS_ELNET_EHD1_ECHONET_LITE != header->ehd1) ||
-        (MLS_ELNET_EHD2_REGULAR != header->ehd1))
+        (MLS_ELNET_EHD2_REGULAR != header->ehd2))
     {
         LOG_WARN(MLS_LOG_DEFAULT_MODULE,
-            "invalid frame header = %d,%d", header->ehd1, header->ehd1);
+            "invalid frame header = %x,%x", header->ehd1, header->ehd2);
         ret = -1;
         goto out;
     }
@@ -436,7 +437,8 @@ out:
 
 /*
   @arg reslen resのサイズが指定され、コピーしたサイズを返す。
-  @return =0 : 処理正常 -or- EPC処理異常
+  @return =1 : 処理正常                  -> 一斉同報
+          =0 : 処理正常 -or- EPC処理異常 -> 個別応答
           =-1: EOJが見つからない -or- 破棄message
  */
 static int
@@ -530,7 +532,16 @@ _handle_message(struct mls_el_ctx *ctx,
         res->tid = req->tid; /* set request-tid */
         *_reslen = MLS_ELNET_FRAME_HEADER_LENGTH + resd_len;
 
-        ret = 0; /* ok, send message -- when ret is 0 -or- -2 */
+        /*
+         * ok, send message -- when ret is 0 -or- -2
+         */
+        /* send multicast group */
+        if (MLS_ELNET_ESV_INF_REQ == req->esv) {
+            ret = 1;
+        /* send unicast */
+        } else {
+            ret = 0;
+        }
     }
 out:
     return ret;
@@ -611,8 +622,9 @@ mls_elnet_announce_profile(struct mls_elnet *elnet, struct mls_node *node)
 void
 mls_elnet_event_handler(struct mls_evt* evt, void* tag)
 {
-    struct sockaddr_storage from;
-    socklen_t fromlen;
+    int ret = 0;
+    struct sockaddr_storage from, *to;
+    socklen_t fromlen, tolen;
     struct mls_el_ctx *ctx = (struct mls_el_ctx *)tag;
     struct mls_elnet *elnet = mls_el_get_elnet(ctx);
     int sock = elnet->srv->sock;
@@ -626,23 +638,33 @@ mls_elnet_event_handler(struct mls_evt* evt, void* tag)
     len = RECVFROM(sock, req, len, 0, 
         (struct sockaddr*)&from, &fromlen);
     if (-1 == len) {
+#if 0
+        if (EAGAIN == errno)
+            /* checksum error */;
+#endif
         LOG_ERR(MLS_LOG_DEFAULT_MODULE,
             "recvfrom(%d): %s.\n", errno, strerror(errno));
         return;
-#if 0
-        if (EAGAIN == errno)
-            goto recv;
-#endif
     }
 
-    if (_handle_message(ctx, req, len, res, &reslen) < 0) {
+    /*
+      @return =1 : 処理正常                  -> 一斉同報
+              =0 : 処理正常 -or- EPC処理異常 -> 個別応答
+              =-1: EOJが見つからない -or- 破棄message
+     */
+    if ((ret = _handle_message(ctx, req, len, res, &reslen)) < 0) {
         LOG_INFO(MLS_LOG_DEFAULT_MODULE,
             "_handle_message(): don't need response.\n");
         return; /* don't need response */
     }
 
     /* Response */
-    len = SENDTO(sock, res, reslen, 0, (struct sockaddr*)&from, fromlen);
+    if (0 == ret) {
+        to = &from; tolen = fromlen;
+    } else {
+        to = &(elnet->srv->to); tolen = elnet->srv->tolen;
+    }
+    len = SENDTO(sock, res, reslen, 0, (struct sockaddr*)to, tolen);
     if (-1 == len) {
         LOG_ERR(MLS_LOG_DEFAULT_MODULE,
             "sendto(%d): %s.\n", errno, strerror(errno));
@@ -669,7 +691,7 @@ _unmarshal_frame_response(struct mls_elnet_frame *req,
     res->tid = mls_type_get_short(&(res->tid), 2);
 #endif
     if (req->tid != res->tid) {
-        LOG_WARN(MLS_LOG_DEFAULT_MODULE,
+        LOG_INFO(MLS_LOG_DEFAULT_MODULE,
             "differ transaction id(%d,%d)\n", req->tid, res->tid);
         ret = -1;
         goto out;
@@ -679,7 +701,7 @@ _unmarshal_frame_response(struct mls_elnet_frame *req,
     if (!mls_eoj_equal_eojc(&(req->seoj), &(res->deoj)) ||
         !mls_eoj_equal_eojc(&(req->deoj), &(res->seoj)))
     {
-        LOG_WARN(MLS_LOG_DEFAULT_MODULE,
+        LOG_INFO(MLS_LOG_DEFAULT_MODULE,
             "differ eojc(%d,%d,%d-%d,%d,%d != %d,%d,%d-%d,%d,%d)\n",
             req->seoj.cgc,req->seoj.clc,req->seoj.inc,
             req->deoj.cgc,req->deoj.clc,req->deoj.inc,
@@ -690,8 +712,10 @@ _unmarshal_frame_response(struct mls_elnet_frame *req,
     }
 
     /* check esv */
-    if ((req->esv & 0x0F) != (res->esv & 0x0F)) {
-        LOG_WARN(MLS_LOG_DEFAULT_MODULE,
+    if ((req->esv == res->esv) ||
+        ((req->esv & 0x0F) != (res->esv & 0x0F)))
+    {
+        LOG_INFO(MLS_LOG_DEFAULT_MODULE,
             "differ esv(%d,%d)\n", req->esv, res->esv);
         ret = -1;
         goto out;
@@ -699,7 +723,7 @@ _unmarshal_frame_response(struct mls_elnet_frame *req,
     
     /* check opc */
     if (req->opc != res->opc) {
-        LOG_WARN(MLS_LOG_DEFAULT_MODULE,
+        LOG_INFO(MLS_LOG_DEFAULT_MODULE,
             "differ opc(%d,%d)\n", req->opc, res->opc);
         ret = -1;
         goto out;
@@ -757,14 +781,14 @@ mls_elnet_rpc(struct mls_net_mcast_cln *cln, char *addr, char *port,
         struct timeval timeout;
 
         ret = SENDTO(sock, (char*)req, reqlen, 0,
-            (struct sockaddr*)&top, tolen);
+            (struct sockaddr*)top, tolen);
         if (-1 == ret) {
             ret = -errno;
             LOG_ERR(MLS_LOG_DEFAULT_MODULE,
                 "sendto(%d,%s)\n", errno, strerror(errno));
             goto out;
         }
-
+    re_select:
         ready = mask;
         timeout.tv_sec = wait_sec;
         timeout.tv_usec = 0;
@@ -792,6 +816,9 @@ mls_elnet_rpc(struct mls_net_mcast_cln *cln, char *addr, char *port,
                     ret = -errno;
                     LOG_ERR(MLS_LOG_DEFAULT_MODULE,
                         "recvfrom(%d,%s)\n", errno, strerror(errno));
+                    if (EAGAIN == -ret) {
+                        goto re_select;
+                    }
                     goto out;
                 }
 
@@ -801,13 +828,12 @@ mls_elnet_rpc(struct mls_net_mcast_cln *cln, char *addr, char *port,
                     /* ignore message retry, error log */
                     LOG_WARN(MLS_LOG_DEFAULT_MODULE,
                         "_unmarshal_frame_response(%d), ignore message\n", ret);
-                    i--;
-                    continue;
+                    goto re_select;
                 }
 
                 /* OK, response packet */
                 ret = len;
-                LOG_ERR(MLS_LOG_DEFAULT_MODULE,
+                LOG_INFO(MLS_LOG_DEFAULT_MODULE,
                     "message rpc, ok(%d,%d)\n", i, ret);
                 goto out;
             }

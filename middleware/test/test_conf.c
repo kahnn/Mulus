@@ -36,6 +36,7 @@ main(int ac, char *argv[])
         CHECK(conf, "key2");
         CHECK(conf, "ckey1");
         CHECK(conf, "undef");
+        CHECK(conf, "keyX");
     }
 
     {
@@ -43,6 +44,7 @@ main(int ac, char *argv[])
         SET(conf, "key3", "val3");
         CHECK(conf, "key2");
         CHECK(conf, "key3");
+        CHECK(conf, "keyX");
     }
     mls_conf_store(conf);
 

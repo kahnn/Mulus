@@ -2,7 +2,7 @@
  * property configuration.
  */
 /*
- * @note XXXX MT-UN-Safe
+ * @note MT-UN-Safe
  */
 #include <stdio.h>
 #include <string.h>

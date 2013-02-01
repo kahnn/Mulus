@@ -4,5 +4,7 @@ key1 = val1
 key2 = val2
 
 # ckey1 = xxxx
+[dummy-section]
+keyX = valX
 
 # Footer Comment

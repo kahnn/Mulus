@@ -9,6 +9,7 @@
 
 #include "mls_type.h"
 #include "mls_elnet.h"
+#include "mls_el.h"
 
 #define errlog(fmt, ...) do{                   \
         fprintf(stderr, fmt, ##__VA_ARGS__);      \
@@ -38,11 +39,11 @@ parse_args(int argc, char* argv[])
         usage(argv[0]);
     }
 
-    _cond_code.cgc = (unsigned char)strtoul(argv[1], NULL, 0);
-    _cond_code.clc = (unsigned char)strtoul(argv[2], NULL, 0);
-    _cond_code.inc = (unsigned char)strtoul(argv[3], NULL, 0);
+    _cond_code.cgc = (unsigned char)strtoul(argv[1], NULL, 16);
+    _cond_code.clc = (unsigned char)strtoul(argv[2], NULL, 16);
+    _cond_code.inc = (unsigned char)strtoul(argv[3], NULL, 16);
 
-#if 1
+#if 0
     errlog("%x,%x,%x\n",
         _cond_code.cgc, _cond_code.clc, _cond_code.inc);
 #endif
@@ -60,11 +61,13 @@ open_sock(char *ifname)
         errlog("mls_net_getaddr_by_ifname(%d) error.\n", ret);
         goto out;
     }
+#if 0
     errlog("ifaddr => %s\n", ifaddr);
+#endif
 
     _cln_ctx = 
         mls_net_mcast_cln_open(MLS_ELNET_MCAST_ADDRESS,
-            MLS_ELNET_MCAST_PORT, ifaddr, "0");
+            MLS_ELNET_MCAST_PORT, ifaddr, MLS_ELNET_MCAST_PORT);
     if (NULL == _cln_ctx) {
         errlog("mls_net_mcast_cln_open() error.\n");
         ret = -1;
@@ -89,7 +92,7 @@ print_host(struct sockaddr_storage *from, socklen_t fromlen,
         errlog("getnameinfo():%s\n", gai_strerror(ret));
         goto out;
     }
-    showlog("%s:%s,0x%x,0x%x,0x%x\n",
+    showlog("%s:%s,%02X,%02X,%02X\n",
         nbuf, sbuf, cond->cgc, cond->clc, cond->inc);
 out:
     return ret;
@@ -105,7 +108,7 @@ find_and_print_eoj(struct sockaddr_storage *from, socklen_t fromlen,
     struct mls_eoj_code *cond)
 {
     int ret = -1; /* not found -or- error */
-    int i, nins = (int)*datap;
+    int i, nins = (unsigned int)*datap;
     unsigned char *cp = (datap + 1);
 
     for (i = 0; i < nins; i++) {
@@ -195,6 +198,8 @@ main(int argc, char* argv[])
     int ret = 0;
     char* ifname = "eth0";
 
+    (void)mls_el_ini();
+
     parse_args(argc, argv);
 
     if ((ret = open_sock(ifname)) != 0) {
@@ -208,5 +213,7 @@ main(int argc, char* argv[])
 out:
     if (NULL != _cln_ctx)
         mls_net_mcast_cln_close(_cln_ctx);
+
+    mls_el_fin();
     return ret;
 }

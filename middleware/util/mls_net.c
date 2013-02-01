@@ -91,14 +91,43 @@ mls_net_mcast_cln_open(const char* maddr, const char *mport,
     int sock = -1;
     struct mls_net_mcast_cln* cln = NULL;
 
+    /* Get address information */
+    {
+        int ret;
+        struct addrinfo hints;
+        char hbuf[NI_MAXHOST], sbuf[NI_MAXSERV];
+
+        memset(&hints, 0, sizeof(hints));
+        hints.ai_family = AF_INET;
+        hints.ai_socktype = SOCK_DGRAM;
+        hints.ai_flags = AI_PASSIVE;
+#if 0
+        if ((ret = getaddrinfo(ifaddr, lport, &hints, &res)) != 0) {
+#endif
+        if ((ret = getaddrinfo(NULL, mport, &hints, &res)) != 0) {
+            errlog("getaddrinfo():%s\n", gai_strerror(ret));
+            goto out;
+        }
+        /* Check */
+        ret = getnameinfo(res->ai_addr, res->ai_addrlen,
+            hbuf, sizeof(hbuf), sbuf, sizeof(sbuf),
+            NI_NUMERICHOST | NI_NUMERICSERV);
+        if (0 != ret) {
+            errlog("getnameinfo():%s\n", gai_strerror(ret));
+            goto out;
+        }
+#if 0
+        showlog("H=%s, S=%s\n", hbuf, sbuf);
+#endif
+    }
+
     /* Create socket */
-    if ((sock = socket(PF_INET, SOCK_DGRAM, 0)) == -1) {
+    sock = socket(res->ai_family, res->ai_socktype, res->ai_protocol);
+    if (-1 == sock) {
         errlog("socket():%s\n", strerror(errno));
         goto out;
     }
     {
-        struct addrinfo hints;
-        int ret;
         int op = 1;
 
         /* Set option (reuse-addr) */
@@ -107,28 +136,11 @@ mls_net_mcast_cln_open(const char* maddr, const char *mport,
             errlog("setsockopt():SO_REUSEADDR:%s\n", strerror(errno));
             goto out;
         }
-        /* Bind addres */
-        memset(&hints, 0, sizeof(hints));
-        hints.ai_family = AF_INET;
-        hints.ai_socktype = SOCK_DGRAM;
-        if ((ret = getaddrinfo(ifaddr, lport, &hints, &res)) != 0) {
-            errlog("getaddrinfo():%s\n", gai_strerror(ret));
-            goto out;
-        }
-        if (bind(sock, (struct sockaddr*)res->ai_addr, res->ai_addrlen) == -1)
+        if (bind(sock, res->ai_addr, res->ai_addrlen) == -1)
         {
             errlog("bind():%s\n", strerror(errno));
             goto out;
         }
-    }
-
-    /* Set multicast interface */
-    if (setsockopt(sock, IPPROTO_IP, IP_MULTICAST_IF,
-            &((struct sockaddr_in*)res->ai_addr)->sin_addr,
-            sizeof(struct in_addr)) == -1)
-    {
-        errlog("setsockopt():IP_MULTICAST_IF:%s\n", strerror(errno));
-        goto out;
     }
     /* Set multicast TTL */
     {
@@ -141,6 +153,15 @@ mls_net_mcast_cln_open(const char* maddr, const char *mport,
             goto out;
         }
     }
+#if 0
+    /* Set multicast interface */
+    if (setsockopt(sock, IPPROTO_IP, IP_MULTICAST_IF,
+            &((struct sockaddr_in*)res->ai_addr)->sin_addr,
+            sizeof(struct in_addr)) == -1)
+    {
+        errlog("setsockopt():IP_MULTICAST_IF:%s\n", strerror(errno));
+        goto out;
+    }
     /* Set multicast loopback */
     {
         unsigned char op2 = 1;
@@ -149,6 +170,21 @@ mls_net_mcast_cln_open(const char* maddr, const char *mport,
                 &op2, sizeof(op2)) == -1)
         {
             errlog("setsockopt():IP_MULTICAST_LOOP:%s\n", strerror(errno));
+            goto out;
+        }
+    }
+#endif
+    /* Join multi-cast group */
+    {
+        struct ip_mreq  mreq;
+
+        memset(&mreq, 0, sizeof(mreq));
+        inet_pton(AF_INET, maddr, &mreq.imr_multiaddr);
+        inet_pton(AF_INET, ifaddr, &mreq.imr_interface);
+        if (setsockopt(sock, IPPROTO_IP, IP_ADD_MEMBERSHIP, 
+                &mreq, sizeof(mreq)) == -1)
+        {
+            errlog("setsockopt():IP_ADD_MEMBERSHIP:%s\n", strerror(errno));
             goto out;
         }
     }
@@ -171,7 +207,7 @@ mls_net_mcast_cln_open(const char* maddr, const char *mport,
     strncpy(cln->maddr, maddr, sizeof(cln->maddr));
     strncpy(cln->mport, mport, sizeof(cln->mport));
     strncpy(cln->ifaddr, ifaddr, sizeof(cln->ifaddr));
-    strncpy(cln->lport, lport, sizeof(cln->lport));
+    strncpy(cln->lport, ((NULL == lport) ? "0" : lport), sizeof(cln->lport));
 
 out:
     if (NULL == cln) {
@@ -212,8 +248,8 @@ mls_net_mcast_srv_open(const char* maddr, const char *mport, const char *ifaddr)
         hints.ai_family = AF_INET;
         hints.ai_socktype = SOCK_DGRAM;
         hints.ai_flags = AI_PASSIVE;
-
-        ret = getaddrinfo(NULL, mport, &hints, &res);
+        /* TODO: XXX arg ifaddr? */
+        ret = getaddrinfo(ifaddr, mport, &hints, &res);
         if (0 != ret) {
             errlog("getaddrinfo():%s\n", gai_strerror(ret));
             goto out;
