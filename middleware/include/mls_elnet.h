@@ -17,12 +17,18 @@
 /*
  * ESV
  */
+#define MLS_ELNET_ESV_REQ_GROUP     ((unsigned char)0x60)
+#define MLS_ELNET_ESV_IS_REQ_GROUP(e) \
+    (((e) & (unsigned char)0xf0) == MLS_ELNET_ESV_REQ_GROUP)
 #define MLS_ELNET_ESV_SetI       ((unsigned char)0x60) /* don't need response */
 #define MLS_ELNET_ESV_SetC       ((unsigned char)0x61)
 #define MLS_ELNET_ESV_Get        ((unsigned char)0x62)
 #define MLS_ELNET_ESV_INF_REQ    ((unsigned char)0x63)
 #define MLS_ELNET_ESV_SetGet     ((unsigned char)0x6E)
 
+#define MLS_ELNET_ESV_RES_INF_GROUP ((unsigned char)0x70)
+#define MLS_ELNET_ESV_IS_RES_INF_GROUP(e) \
+    (((e) & (unsigned char)0xf0) == MLS_ELNET_ESV_RES_INF_GROUP)
 #define MLS_ELNET_ESV_Set_Res    ((unsigned char)0x71)
 #define MLS_ELNET_ESV_Get_Res    ((unsigned char)0x72)
 #define MLS_ELNET_ESV_INF        ((unsigned char)0x73) /* don't need response */
@@ -30,6 +36,9 @@
 #define MLS_ELNET_ESV_INFC_Res   ((unsigned char)0x7A) /* INFC response */
 #define MLS_ELNET_ESV_SetGet_Res ((unsigned char)0x7E)
 
+#define MLS_ELNET_ESV_ERR_RES_GROUP ((unsigned char)0x50)
+#define MLS_ELNET_ESV_IS_ERR_RES_GROUP(e) \
+    (((e) & (unsigned char)0xf0) == MLS_ELNET_ESV_ERR_RES_GROUP)
 #define MLS_ELNET_ESV_SetI_SNA   ((unsigned char)0x50)
 #define MLS_ELNET_ESV_SetC_SNA   ((unsigned char)0x51)
 #define MLS_ELNET_ESV_Get_SNA    ((unsigned char)0x52)

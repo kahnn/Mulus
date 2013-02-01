@@ -134,7 +134,7 @@ command(void)
     struct mls_elnet_frame *req = (struct mls_elnet_frame*)_req;
     unsigned int reqlen = sizeof(_req);
     struct mls_elnet_frame *res = (struct mls_elnet_frame*)_res;
-    unsigned int reslen = sizeof(_res);
+    int reslen = sizeof(_res);
 
     /* create request */
     {

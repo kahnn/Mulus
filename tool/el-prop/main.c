@@ -77,9 +77,9 @@ output_data(unsigned char epc, unsigned char *datap, unsigned int datalen)
 {
     int i;
 
-    showlog("%02x,", epc);
+    showlog("%02X,", epc);
     for (i = 0; i < datalen; i++) {
-        showlog("%02x", *(datap + i));
+        showlog("%02X", *(datap + i));
     }
     showlog("\n");
 }
@@ -114,7 +114,7 @@ parse_args(int argc, char* argv[])
         _epc_val = argv[optind++];
     }
 
-#if 1
+#if 0
     errlog("%d:%s:%x,%x,%x:%x,%s\n",
         _run_mode, _remote_host, 
         _eoj_code.cgc, _eoj_code.clc, _eoj_code.inc, _epc, _epc_val);
@@ -136,11 +136,13 @@ open_sock(char *ifname)
         errlog("mls_net_getaddr_by_ifname(%d) error.\n", ret);
         goto out;
     }
+#if 0
     errlog("ifaddr => %s\n", ifaddr);
+#endif
 
     _cln_ctx = 
         mls_net_mcast_cln_open(MLS_ELNET_MCAST_ADDRESS,
-            MLS_ELNET_MCAST_PORT, ifaddr, "0");
+            MLS_ELNET_MCAST_PORT, ifaddr, NULL);
     if (NULL == _cln_ctx) {
         errlog("mls_net_mcast_cln_open() error.\n");
         ret = -1;
@@ -177,7 +179,7 @@ command(void)
     struct mls_elnet_frame *req = (struct mls_elnet_frame*)_req;
     unsigned int reqlen = sizeof(_req);
     struct mls_elnet_frame *res = (struct mls_elnet_frame*)_res;
-    unsigned int reslen = sizeof(_res);
+    int reslen = sizeof(_res);
 
     /* target host */
     if (parse_addr(_remote_host, &addr, &port) < 0) {
@@ -211,16 +213,23 @@ command(void)
     reslen = mls_elnet_rpc(_cln_ctx, addr, port, req, reqlen, res, reslen);
     if (reslen < 0) {
         errlog("Error mls_elnet_rpc(%d)\n", reslen);
-        ret = -1;
+        ret = -10;
         goto out;
     }
 
     /*
-     * OK! response valid packet.
+     * OK! valid response packet.
      */
+
+    /* check error code */
+    if (MLS_ELNET_ESV_IS_ERR_RES_GROUP(res->esv)) {
+        errlog("Error response code (%02X)\n", res->esv);
+        ret = -11;
+        goto out;
+    }
     /* output result */
     output_data(_epc,
-        ((_run_mode) ? _epc_rawdata : &(res->data[0])),
+        ((_run_mode) ? _epc_rawdata : &(res->data[2])),
         ((_run_mode) ? _epc_rawdata_len : (res->data[1])));
     ret = 0;
 
