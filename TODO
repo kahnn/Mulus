@@ -1,23 +1,22 @@
 ---------------------------------------------------------
-- α版リリースまでの作業
-
-全体的に統一したエラー出力機構を導入する。
-パケット送信、受信のメソッドを mls_elnet に統合し、送受信ダンプを取得可能にする。
-ある程度の疎通試験
-
-公開作業
-  README.md のリリース記録
-  タグを付ける
-  公開用の内容を push する
-  github project description に説明を加える
-   Project Mulus is ECHONET Lite Tool-kit, which is implemented in the C-language.
-   
----------------------------------------------------------
 - 実装上のTODO
 
+ログの取り扱いを整理する。(全体的に統一したエラー出力機構)
 パケットの取り扱いを容易にするため、bytebuffer機能を取り入れてソース整理する。
 コマンドで使うマルチキャスト用のインターフェース(eth0など)を引数指定可能にする。
 mls_el_ctx などtermでのリソース解放ができていないところがあるので、対応する
 デバイスオブジェクトは、テンプレート型式で生成できるようにする。それをベースに各自が開発する（予定）。
 テストが不十分。
+el-discover を複数ノードを取得可能にする
+el-prop で複数プロパティを取り扱えるようにする
 
+---------------------------------------------------------
+- リリース作業手順
+
+README.md のリリース記録
+タグを付ける
+  RELEASE-0.0.0_ALPHA-1 など
+内容を push する
+
+*github project description に説明を加える
+ Project Mulus is ECHONET Lite Tool-kit, which is implemented in the C-language.
