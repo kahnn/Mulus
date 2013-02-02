@@ -6,17 +6,19 @@
 コマンドで使うマルチキャスト用のインターフェース(eth0など)を引数指定可能にする。
 mls_el_ctx などtermでのリソース解放ができていないところがあるので、対応する
 デバイスオブジェクトは、テンプレート型式で生成できるようにする。それをベースに各自が開発する（予定）。
-テストが不十分。
 el-discover を複数ノードを取得可能にする
 el-prop で複数プロパティを取り扱えるようにする
+
+テストが不十分なので追加する
 
 ---------------------------------------------------------
 - リリース作業手順
 
-README.md のリリース記録
-タグを付ける
-  RELEASE-0.0.0_ALPHA-1 など
-内容を push する
+- README.md のリリース記録
+- タグを付ける
+  * RELEASE-0.0.0_ALPHA-1 など
+  git tag 
+- 内容を push する
 
-*github project description に説明を加える
+* github project description 説明更新
  Project Mulus is ECHONET Lite Tool-kit, which is implemented in the C-language.

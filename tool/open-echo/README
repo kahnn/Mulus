@@ -72,8 +72,7 @@ ct temperature                    : change temperature
   EchoObjectには以下のメソッドがあるけど、protected なので汎用アクセスが面倒。
         protected synchronized byte[] getProperty(byte epc) 
 
-NC2枚ではうまくいかない。
-
+NC2枚ではうまくいかない?
 ノードの判別にIPアドレスを利用している。
 正確には、IPアドレス＋そのノードがproxyかどうかで判定している。
 しかも、自ノードのEchoNodeを作成する際に、コンストラクタ内で Echo内のノードリストに自ノードオブジェクトを
