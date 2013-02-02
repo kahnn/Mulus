@@ -253,10 +253,12 @@ _handle_message(struct mls_el_ctx *ctx,
     /* Request */
     case MLS_ELOPE_SVC_GET_REQ:
         svc = MLS_ELOPE_SVC_GET_RES;
+        (*res)->pdc = UCHAR_MAX;
         rc = _get_properties(ctx, req, (*res)->data, &((*res)->pdc));
         break;
     case MLS_ELOPE_SVC_SET_REQ:
         svc = MLS_ELOPE_SVC_SET_RES;
+        (*res)->pdc = 0;
         rc = _set_properties(ctx, req);
         break;
     }

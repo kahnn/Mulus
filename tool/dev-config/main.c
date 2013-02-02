@@ -109,7 +109,7 @@ parse_args(int argc, char* argv[])
         _epc_val = argv[optind++];
     }
 
-#if 1
+#if 0
     errlog("%d:%x,%x,%x:%x,%s\n",
         _run_mode, 
         _eoj_code.cgc, _eoj_code.clc, _eoj_code.inc, _epc, _epc_val);
