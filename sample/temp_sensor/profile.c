@@ -216,23 +216,12 @@ static int
 _get_self_node_instance_list(struct mls_eoj* eoj, unsigned char epc,
     unsigned char* buf, unsigned char* len)
 {
-    mls_dlink_t *work;
-    struct mls_node* node = eoj->node;
-    unsigned char nins = 0;
-    /* buf[0] = number of instances */
-    unsigned char *cp = &(buf[1]);
-    *len -= 1;
+    int total;
 
-    mls_dlink_loop(&(node->eojs_list), work)
-    {
-        struct mls_eoj* eoj =
-            mls_dlink_container(work, struct mls_eoj, eojs_list);
-        cp += mls_eoj_set_eojcode(&(eoj->code), cp, (unsigned int*)len);
-        nins++;
-    }
-    buf[0] = nins;
+    total = mls_el_node_get_instance_list(eoj->node, buf, len);
+    *len -= total;
 
-    return (cp - buf);
+    return total;
 }
 
 /* ---------------------------------------------------------------- */
@@ -241,27 +230,19 @@ static int
 _get_self_node_class_list(struct mls_eoj* eoj, unsigned char epc,
     unsigned char* buf, unsigned char* len)
 {
-    mls_dlink_t *work;
-    struct mls_node* node = eoj->node;
-    unsigned char nins = 0;
-    /* buf[0] = number of classes */
-    unsigned char *cp = &(buf[1]);
-    *len -= 1;
+    int total;
 
-    mls_dlink_loop(&(node->eojs_list), work)
-    {
-        struct mls_eoj* eoj =
-            mls_dlink_container(work, struct mls_eoj, eojs_list);
-        cp += mls_eoj_set_eojclass(&(eoj->code), cp, (unsigned int*)len);
-        nins++;
-    }
-    buf[0] = nins;
+    total = mls_el_node_get_class_list(eoj->node, buf, len);
+    *len -= total;
 
-    return (cp - buf);
+    return total;
 }
 
 /* ---------------------------------------------------------------- */
 
+/*
+ * プロパティ配列
+ */
 static struct mls_epr props[] = {
     /* profile super class */
     {
@@ -340,6 +321,9 @@ static struct mls_epr props[] = {
     },
 };
 
+/*
+ * プロファイルオブジェクト
+ */
 static struct mls_eoj profile = {
     .code = {
         .cgc = MLS_EL_CGC_PROFILE,

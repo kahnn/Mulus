@@ -36,7 +36,7 @@ char *_epc_val = "dummy";
 unsigned char _epc_rawdata[UCHAR_MAX];
 unsigned char _epc_rawdata_len;
 
-struct mls_net_mcast_cln* _cln_ctx = NULL;
+struct mls_net_mcast_ctx* _cln_ctx = NULL;
 
 static unsigned char _req[MLS_ELNET_FRAME_LENGTH_MAX];
 static unsigned char _res[MLS_ELNET_FRAME_LENGTH_MAX];
@@ -141,8 +141,8 @@ open_sock(char *ifname)
 #endif
 
     _cln_ctx = 
-        mls_net_mcast_cln_open(MLS_ELNET_MCAST_ADDRESS,
-            MLS_ELNET_MCAST_PORT, ifaddr, NULL);
+        mls_net_mcast_open_ctx(MLS_ELNET_MCAST_ADDRESS,
+            MLS_ELNET_MCAST_PORT, ifaddr);
     if (NULL == _cln_ctx) {
         errlog("mls_net_mcast_cln_open() error.\n");
         ret = -1;
@@ -257,7 +257,7 @@ main(int argc, char* argv[])
 
 out:
     if (NULL != _cln_ctx)
-        mls_net_mcast_cln_close(_cln_ctx);
+        mls_net_mcast_close_ctx(_cln_ctx);
 
     mls_el_fin();
     return ret;

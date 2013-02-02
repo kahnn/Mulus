@@ -46,11 +46,12 @@ _timeinterval_handler(struct mls_evt* evt, void* tag)
 
 /*
  初期化：
-  create profile
-  create device object
-  create node
-  initialize network 
-  create context
+   initialize 
+   create profile
+   create device object
+   create node
+   initialize network 
+   create context
  */
 static int
 init(char *ifname, struct mls_el_ctx **ctxpp)
@@ -113,8 +114,8 @@ term(struct mls_el_ctx *ctx)
 
 /*
  メイン処理：
-  announce profile
-  event dispatch
+   announce profile
+   event dispatch
  */
 static void
 run(struct mls_el_ctx *ctx)

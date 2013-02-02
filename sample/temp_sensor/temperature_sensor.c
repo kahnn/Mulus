@@ -211,8 +211,12 @@ _timeinterval_handler(struct mls_evt* evt, void* tag)
      */
     _temp_value++;
 }
+
 /* ---------------------------------------------------------------- */
 
+/*
+ * プロパティ配列
+ */
 static struct mls_epr props[] = {
     /* device object super class */
     {
@@ -272,6 +276,9 @@ static struct mls_epr props[] = {
     },
 };
 
+/*
+ * デバイスオブジェクト
+ */
 static struct mls_eoj temp_sensor = {
     .code = {
         .cgc = MLS_EL_CGC_SENSOR,

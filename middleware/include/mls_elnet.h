@@ -70,7 +70,7 @@ struct mls_elnet_frame {
  * Context.
  */
 struct mls_elnet {
-    struct mls_net_mcast_srv *srv;
+    struct mls_net_mcast_ctx *ctx;
 };
 
 extern struct mls_elnet *mls_elnet_init(char *ifname);
@@ -80,7 +80,7 @@ extern void mls_elnet_event_handler(struct mls_evt*, void*);
 extern void mls_elnet_announce_profile(struct mls_elnet*,struct mls_node*);
 extern void mls_elnet_announce_property(struct mls_elnet*,struct mls_node*,struct mls_eoj_code*, unsigned char epc, unsigned char pdc, unsigned char *data);
 
-extern int mls_elnet_rpc(struct mls_net_mcast_cln*, char *addr, char *port,
+extern int mls_elnet_rpc(struct mls_net_mcast_ctx*, char *addr, char *port,
     struct mls_elnet_frame *req, int reqlen,
     struct mls_elnet_frame *res, int reslen);
 

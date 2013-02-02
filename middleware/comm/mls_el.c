@@ -91,7 +91,7 @@ _set_event(struct mls_el_ctx *ctx)
         goto out;
     }
     /* EL multicat */
-    ret = mls_evt_add_handle(evt, MLS_EVT_FD, ctx->elnet->srv->sock,
+    ret = mls_evt_add_handle(evt, MLS_EVT_FD, ctx->elnet->ctx->sock,
         mls_elnet_event_handler, ctx);
     if (ret < 0) {
         LOG_ERR(MLS_LOG_DEFAULT_MODULE, 

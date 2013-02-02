@@ -77,7 +77,7 @@ RECVFROM(int sockfd, void *buf, size_t len, int flags,
 struct mls_elnet*
 mls_elnet_init(char *ifname)
 {
-    struct mls_net_mcast_srv* srv = NULL;
+    struct mls_net_mcast_ctx* srv = NULL;
     struct mls_elnet* elnet = NULL;
     char ifaddr[64];
 
@@ -94,7 +94,7 @@ mls_elnet_init(char *ifname)
         }
     }
     srv = 
-        mls_net_mcast_srv_open(MLS_ELNET_MCAST_ADDRESS, MLS_ELNET_MCAST_PORT,
+        mls_net_mcast_open_ctx(MLS_ELNET_MCAST_ADDRESS, MLS_ELNET_MCAST_PORT,
             ifaddr);
     if (NULL == srv) {
         LOG_ERR(MLS_LOG_DEFAULT_MODULE, 
@@ -103,7 +103,7 @@ mls_elnet_init(char *ifname)
     }
 
     elnet = &_lelnet;
-    elnet->srv = srv;
+    elnet->ctx = srv;
 
 out:
     return elnet;
@@ -112,7 +112,7 @@ out:
 void
 mls_elnet_term(struct mls_elnet* elnet)
 {
-    mls_net_mcast_srv_close(elnet->srv);
+    mls_net_mcast_close_ctx(elnet->ctx);
 }
 
 /* ------------------------------------------------------------- */
@@ -581,8 +581,8 @@ mls_elnet_announce_property(struct mls_elnet *elnet,
 
     {
         int ret;
-        ret = SENDTO(elnet->srv->sock, req, reqlen, 0,
-            (struct sockaddr*)&(elnet->srv->to), elnet->srv->tolen);
+        ret = SENDTO(elnet->ctx->sock, req, reqlen, 0,
+            (struct sockaddr*)&(elnet->ctx->to), elnet->ctx->tolen);
         if (-1 == ret) {
             LOG_ERR(MLS_LOG_DEFAULT_MODULE,
                 "sendto(%d): %s.\n", errno, strerror(errno));
@@ -615,8 +615,8 @@ mls_elnet_announce_profile(struct mls_elnet *elnet, struct mls_node *node)
 
     {
         int ret;
-        ret = SENDTO(elnet->srv->sock, (char *)req, reqlen, 0,
-            (struct sockaddr*)&(elnet->srv->to), elnet->srv->tolen);
+        ret = SENDTO(elnet->ctx->sock, (char *)req, reqlen, 0,
+            (struct sockaddr*)&(elnet->ctx->to), elnet->ctx->tolen);
         if (-1 == ret) {
             LOG_ERR(MLS_LOG_DEFAULT_MODULE,
                 "sendto(%d): %s.\n", errno, strerror(errno));
@@ -639,7 +639,7 @@ mls_elnet_event_handler(struct mls_evt* evt, void* tag)
     socklen_t fromlen, tolen;
     struct mls_el_ctx *ctx = (struct mls_el_ctx *)tag;
     struct mls_elnet *elnet = mls_el_get_elnet(ctx);
-    int sock = elnet->srv->sock;
+    int sock = elnet->ctx->sock;
     unsigned char* req = _req;
     unsigned int len = sizeof(_req);
     unsigned char* res = _res;
@@ -674,7 +674,7 @@ mls_elnet_event_handler(struct mls_evt* evt, void* tag)
     if (0 == ret) {
         to = &from; tolen = fromlen;
     } else {
-        to = &(elnet->srv->to); tolen = elnet->srv->tolen;
+        to = &(elnet->ctx->to); tolen = elnet->ctx->tolen;
     }
     len = SENDTO(sock, res, reslen, 0, (struct sockaddr*)to, tolen);
     if (-1 == len) {
@@ -760,7 +760,7 @@ mls_elnet_setup_frame_header(struct mls_elnet_frame *req,
 }
 
 int
-mls_elnet_rpc(struct mls_net_mcast_cln *cln, char *addr, char *port,
+mls_elnet_rpc(struct mls_net_mcast_ctx *cln, char *addr, char *port,
     struct mls_elnet_frame *req, int reqlen,
     struct mls_elnet_frame *res, int reslen)
 {

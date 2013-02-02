@@ -6,7 +6,7 @@
 #include    "mls_net.h"
 
 void
-server_dispatch(struct mls_net_mcast_srv* srv)
+server_dispatch(struct mls_net_mcast_ctx* srv)
 {
     struct sockaddr_storage from;
     socklen_t fromlen;
@@ -66,7 +66,7 @@ server_dispatch(struct mls_net_mcast_srv* srv)
 int
 main(int argc, char *argv[])
 {
-    struct mls_net_mcast_srv* srv = NULL;
+    struct mls_net_mcast_ctx* srv = NULL;
     char ifaddr[256];
 
     if (argc <= 3) {
@@ -96,7 +96,7 @@ main(int argc, char *argv[])
         fprintf(stdout, "ifaddr => %s\n", ifaddr);
     }
 
-    srv = mls_net_mcast_srv_open(argv[1], argv[2], ifaddr);
+    srv = mls_net_mcast_open_ctx(argv[1], argv[2], ifaddr);
     if (NULL == srv) {
         fprintf(stderr, "mls_net_mcast_srv_open() error.\n");
         goto out;
@@ -106,7 +106,7 @@ main(int argc, char *argv[])
 
 out:
     if (NULL != srv)
-        mls_net_mcast_srv_close(srv);
+        mls_net_mcast_close_ctx(srv);
 
     return 0;
 }

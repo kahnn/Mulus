@@ -13,16 +13,7 @@
 #define MLS_NET_LEN_PORT 16
 #define MLS_NET_MULTICAST_TTL 16
 
-struct mls_net_mcast_srv {
-    int sock;
-    struct sockaddr_storage to;
-    socklen_t tolen;
-    char maddr[MLS_NET_LEN_ADDR];
-    char mport[MLS_NET_LEN_PORT];
-    char ifaddr[MLS_NET_LEN_ADDR];
-};
-
-struct mls_net_mcast_cln {
+struct mls_net_mcast_ctx {
     int sock;
     struct sockaddr_storage to;
     socklen_t tolen;
@@ -31,7 +22,6 @@ struct mls_net_mcast_cln {
     char maddr[MLS_NET_LEN_ADDR];
     char mport[MLS_NET_LEN_PORT];
     char ifaddr[MLS_NET_LEN_ADDR];
-    char lport[MLS_NET_LEN_PORT];
 };
 
 #define MLS_NET_UNIX_DOMAIN_SRV_SUFFIX "_srv"
@@ -54,11 +44,8 @@ struct mls_net_ud_cln {
  * @args lport  Local-port-number -or- ANY="0"
  * @args af  Address-Family AF_INET -or- AF_INET6
  */
-extern struct mls_net_mcast_srv* mls_net_mcast_srv_open(const char* maddr, const char *mport, const char *ifaddr);
-extern void mls_net_mcast_srv_close(struct mls_net_mcast_srv*);
-
-extern struct mls_net_mcast_cln* mls_net_mcast_cln_open(const char* maddr, const char *mport, const char* ifaddr, const char *lport);
-extern void mls_net_mcast_cln_close(struct mls_net_mcast_cln*);
+extern struct mls_net_mcast_ctx* mls_net_mcast_open_ctx(const char* maddr, const char *mport, const char *ifaddr);
+extern void mls_net_mcast_close_ctx(struct mls_net_mcast_ctx*);
 
 extern struct mls_net_ud_srv* mls_net_udgram_srv_open(const char*);
 extern void mls_net_udgram_srv_close(struct mls_net_ud_srv*);

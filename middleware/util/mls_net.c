@@ -81,15 +81,14 @@ out:
     return ret;
 }
 
-struct mls_net_mcast_cln*
-mls_net_mcast_cln_open(const char* maddr, const char *mport, 
-    const char* ifaddr, const char *lport)
+struct mls_net_mcast_ctx*
+mls_net_mcast_open_ctx(const char* maddr, const char *mport, const char *ifaddr)
 {
     struct sockaddr_storage tom;
     socklen_t tomlen;
     struct addrinfo *res = NULL;
     int sock = -1;
-    struct mls_net_mcast_cln* cln = NULL;
+    struct mls_net_mcast_ctx* ctx = NULL;
 
     /* Get address information */
     {
@@ -97,17 +96,18 @@ mls_net_mcast_cln_open(const char* maddr, const char *mport,
         struct addrinfo hints;
         char hbuf[NI_MAXHOST], sbuf[NI_MAXSERV];
 
+        /* Setup hints */
         memset(&hints, 0, sizeof(hints));
         hints.ai_family = AF_INET;
         hints.ai_socktype = SOCK_DGRAM;
         hints.ai_flags = AI_PASSIVE;
-#if 0
-        if ((ret = getaddrinfo(ifaddr, lport, &hints, &res)) != 0) {
-#endif
-        if ((ret = getaddrinfo(NULL, mport, &hints, &res)) != 0) {
+
+        ret = getaddrinfo(NULL, mport, &hints, &res);
+        if (0 != ret) {
             errlog("getaddrinfo():%s\n", gai_strerror(ret));
             goto out;
         }
+
         /* Check */
         ret = getnameinfo(res->ai_addr, res->ai_addrlen,
             hbuf, sizeof(hbuf), sbuf, sizeof(sbuf),
@@ -136,12 +136,13 @@ mls_net_mcast_cln_open(const char* maddr, const char *mport,
             errlog("setsockopt():SO_REUSEADDR:%s\n", strerror(errno));
             goto out;
         }
-        if (bind(sock, res->ai_addr, res->ai_addrlen) == -1)
-        {
+        /* Bind addres */
+        if (bind(sock, res->ai_addr, res->ai_addrlen) == -1) {
             errlog("bind():%s\n", strerror(errno));
             goto out;
         }
     }
+
     /* Set multicast TTL */
     {
         unsigned char op2 = MLS_NET_MULTICAST_TTL;
@@ -155,6 +156,7 @@ mls_net_mcast_cln_open(const char* maddr, const char *mport,
     }
 #if 0
     /* Set multicast interface */
+    /* TODO: XXXX use ifaddr */
     if (setsockopt(sock, IPPROTO_IP, IP_MULTICAST_IF,
             &((struct sockaddr_in*)res->ai_addr)->sin_addr,
             sizeof(struct in_addr)) == -1)
@@ -174,117 +176,6 @@ mls_net_mcast_cln_open(const char* maddr, const char *mport,
         }
     }
 #endif
-    /* Join multi-cast group */
-    {
-        struct ip_mreq  mreq;
-
-        memset(&mreq, 0, sizeof(mreq));
-        inet_pton(AF_INET, maddr, &mreq.imr_multiaddr);
-        inet_pton(AF_INET, ifaddr, &mreq.imr_interface);
-        if (setsockopt(sock, IPPROTO_IP, IP_ADD_MEMBERSHIP, 
-                &mreq, sizeof(mreq)) == -1)
-        {
-            errlog("setsockopt():IP_ADD_MEMBERSHIP:%s\n", strerror(errno));
-            goto out;
-        }
-    }
-
-    /* Get multicast-address */
-    if (mls_net_get_sockaddr_info(maddr, mport, &tom, &tomlen) == -1) {
-        errlog("mls_net_get_sockaddr_info():%s\n", strerror(errno));
-        goto out;
-    }
-
-    /* Create client-context */
-    cln = malloc(sizeof(*cln));
-    if (NULL == cln) {
-        errlog("malloc():%s\n", strerror(errno));
-        goto out;
-    }
-    cln->sock = sock;
-    cln->to = tom;
-    cln->tolen = tomlen;
-    strncpy(cln->maddr, maddr, sizeof(cln->maddr));
-    strncpy(cln->mport, mport, sizeof(cln->mport));
-    strncpy(cln->ifaddr, ifaddr, sizeof(cln->ifaddr));
-    strncpy(cln->lport, ((NULL == lport) ? "0" : lport), sizeof(cln->lport));
-
-out:
-    if (NULL == cln) {
-        if (-1 != sock) {
-            close(sock);
-        }
-    }
-    if (NULL != res) {
-        freeaddrinfo(res);
-    }
-    return cln;
-}
-
-void
-mls_net_mcast_cln_close(struct mls_net_mcast_cln* cln)
-{
-    close(cln->sock);
-    free(cln);
-}
-
-struct mls_net_mcast_srv*
-mls_net_mcast_srv_open(const char* maddr, const char *mport, const char *ifaddr)
-{
-    struct sockaddr_storage tom;
-    socklen_t tomlen;
-    struct addrinfo *res = NULL;
-    int sock = -1;
-    struct mls_net_mcast_srv* srv = NULL;
-
-    /* Get address information */
-    {
-        int ret;
-        struct addrinfo hints;
-        char hbuf[NI_MAXHOST], sbuf[NI_MAXSERV];
-
-        /* Setup hints */
-        memset(&hints, 0, sizeof(hints));
-        hints.ai_family = AF_INET;
-        hints.ai_socktype = SOCK_DGRAM;
-        hints.ai_flags = AI_PASSIVE;
-        /* TODO: XXX arg ifaddr? */
-        ret = getaddrinfo(NULL, mport, &hints, &res);
-        if (0 != ret) {
-            errlog("getaddrinfo():%s\n", gai_strerror(ret));
-            goto out;
-        }
-        /* Check */
-        ret = getnameinfo(res->ai_addr, res->ai_addrlen,
-            hbuf, sizeof(hbuf), sbuf, sizeof(sbuf),
-            NI_NUMERICHOST | NI_NUMERICSERV);
-        if (0 != ret) {
-            errlog("getnameinfo():%s\n", gai_strerror(ret));
-            goto out;
-        }
-    }
-
-    /* Create socket */
-    sock = socket(res->ai_family, res->ai_socktype, res->ai_protocol);
-    if (-1 == sock) {
-        errlog("socket():%s\n", strerror(errno));
-        goto out;
-    }
-    {
-        int op = 1;
-
-        /* Set option (reuse-addr) */
-        if (setsockopt(sock, SOL_SOCKET, SO_REUSEADDR, &op, sizeof(op)) == -1)
-        {
-            errlog("setsockopt():SO_REUSEADDR:%s\n", strerror(errno));
-            goto out;
-        }
-        /* Bind addres */
-        if (bind(sock, res->ai_addr, res->ai_addrlen) == -1) {
-            errlog("bind():%s\n", strerror(errno));
-            goto out;
-        }
-    }
 
     /* Join multi-cast group */
     {
@@ -307,21 +198,21 @@ mls_net_mcast_srv_open(const char* maddr, const char *mport, const char *ifaddr)
         goto out;
     }
 
-    /* Create server-context */
-    srv = malloc(sizeof(*srv));
-    if (NULL == srv) {
+    /* Create context */
+    ctx = malloc(sizeof(*ctx));
+    if (NULL == ctx) {
         errlog("malloc():%s\n", strerror(errno));
         goto out;
     }
-    srv->sock = sock;
-    srv->to = tom;
-    srv->tolen = tomlen;
-    strncpy(srv->maddr, maddr, sizeof(srv->maddr));
-    strncpy(srv->mport, mport, sizeof(srv->mport));
-    strncpy(srv->ifaddr, ifaddr, sizeof(srv->ifaddr));
+    ctx->sock = sock;
+    ctx->to = tom;
+    ctx->tolen = tomlen;
+    strncpy(ctx->maddr, maddr, sizeof(ctx->maddr));
+    strncpy(ctx->mport, mport, sizeof(ctx->mport));
+    strncpy(ctx->ifaddr, ifaddr, sizeof(ctx->ifaddr));
 
 out:
-    if (NULL == srv) {
+    if (NULL == ctx) {
         if (-1 != sock) {
             close(sock);
         }
@@ -329,26 +220,26 @@ out:
     if (NULL != res) {
         freeaddrinfo(res);
     }
-    return srv;
+    return ctx;
 }
 
 void
-mls_net_mcast_srv_close(struct mls_net_mcast_srv* srv)
+mls_net_mcast_close_ctx(struct mls_net_mcast_ctx* ctx)
 {
     struct ip_mreq  mreq;
 
     memset(&mreq, 0, sizeof(mreq));
-    inet_pton(AF_INET, srv->maddr, &mreq.imr_multiaddr);
-    inet_pton(AF_INET, srv->ifaddr, &mreq.imr_interface);
-    if (setsockopt(srv->sock,
+    inet_pton(AF_INET, ctx->maddr, &mreq.imr_multiaddr);
+    inet_pton(AF_INET, ctx->ifaddr, &mreq.imr_interface);
+    if (setsockopt(ctx->sock,
             IPPROTO_IP, IP_DROP_MEMBERSHIP,
             &mreq, sizeof(mreq)) == -1)
     {
         errlog("setsockopt():IP_DROP_MEMBERSHIP:%s\n", strerror(errno));
     }
-    close(srv->sock);
+    close(ctx->sock);
 
-    free(srv);
+    free(ctx);
 }
 
 struct mls_net_ud_srv*

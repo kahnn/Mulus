@@ -5,7 +5,7 @@
 #include    "mls_net.h"
 
 void
-client_dispatch(struct mls_net_mcast_cln* cln)
+client_dispatch(struct mls_net_mcast_ctx* cln)
 {
     int sock = cln->sock;
     fd_set mask;
@@ -90,15 +90,14 @@ client_dispatch(struct mls_net_mcast_cln* cln)
 int
 main(int argc, char *argv[])
 {
-    struct mls_net_mcast_cln* cln = NULL;
+    struct mls_net_mcast_ctx* cln = NULL;
     char ifaddr[256];
 
-    if (argc <= 4) {
+    if (argc < 4) {
         fprintf(stderr, "%s mc-address mc-port if-address l-port\n", argv[0]);
         fprintf(stderr, "   mc-address: 224.0.23.0\n");
         fprintf(stderr, "   mc-port:    3610\n");
         fprintf(stderr, "   if-address: 0.0.0.0 -or- eth0\n");
-        fprintf(stderr, "   l-port:     0\n");
         goto out;
     }
 
@@ -121,7 +120,7 @@ main(int argc, char *argv[])
         fprintf(stdout, "ifaddr => %s\n", ifaddr);
     }
 
-    cln = mls_net_mcast_cln_open(argv[1], argv[2], ifaddr, argv[4]);
+    cln = mls_net_mcast_open_ctx(argv[1], argv[2], ifaddr);
     if (NULL == cln) {
         fprintf(stderr, "mls_net_mcast_cln_open() error.\n");
         goto out;
@@ -132,7 +131,7 @@ main(int argc, char *argv[])
 
 out:
     if (NULL != cln)
-        mls_net_mcast_cln_close(cln);
+        mls_net_mcast_close_ctx(cln);
 
     return 0;
 }

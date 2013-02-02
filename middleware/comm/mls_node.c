@@ -63,3 +63,47 @@ mls_el_node_get_device(struct mls_node *node, struct mls_eoj_code *code)
 out:
     return found;
 }
+
+int
+mls_el_node_get_instance_list(struct mls_node* node,
+    unsigned char* buf, unsigned char* len)
+{
+    mls_dlink_t *work;
+    /* buf[0] = number of classes */
+    unsigned char *cp = &(buf[1]);
+    unsigned int rest = (*len - 1);
+    unsigned char nins = 0;
+
+    mls_dlink_loop(&(node->eojs_list), work)
+    {
+        struct mls_eoj* eoj =
+            mls_dlink_container(work, struct mls_eoj, eojs_list);
+        cp += mls_eoj_set_eojcode(&(eoj->code), cp, &rest);
+        nins++;
+    }
+    buf[0] = nins;
+
+    return (*len - rest);
+}
+
+int
+mls_el_node_get_class_list(struct mls_node* node,
+    unsigned char* buf, unsigned char* len)
+{
+    mls_dlink_t *work;
+    /* buf[0] = number of classes */
+    unsigned char *cp = &(buf[1]);
+    unsigned int rest = (*len - 1);
+    unsigned char nins = 0;
+
+    mls_dlink_loop(&(node->eojs_list), work)
+    {
+        struct mls_eoj* eoj =
+            mls_dlink_container(work, struct mls_eoj, eojs_list);
+        cp += mls_eoj_set_eojclass(&(eoj->code), cp, &rest);
+        nins++;
+    }
+    buf[0] = nins;
+
+    return (*len - rest);
+}
