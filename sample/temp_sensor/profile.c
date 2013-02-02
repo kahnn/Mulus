@@ -4,6 +4,13 @@
 #include "mls_obj.h"
 #include "mls_node.h"
 
+#define errlog(fmt, ...) do{                   \
+        fprintf(stderr, fmt, ##__VA_ARGS__);      \
+  }while(0)
+#define showlog(fmt, ...) do{                   \
+        fprintf(stdout, fmt, ##__VA_ARGS__);      \
+  }while(0)
+
 /* ---------------------------------------------------------------- */
 
 static unsigned char _manufacture_code[] = {
@@ -102,7 +109,7 @@ _set_operation_status(struct mls_eoj* eoj, unsigned char epc,
 /* ---------------------------------------------------------------- */
 
 static unsigned char _standard_version_information[] = {
-    (unsigned char)0x01, (unsigned char)0x00,
+    (unsigned char)0x01, (unsigned char)0x01,
     (unsigned char)0x01, (unsigned char)0x00
 };
 
@@ -157,7 +164,7 @@ _set_identification_number(struct mls_eoj* eoj, unsigned char epc,
 
 /* ---------------------------------------------------------------- */
 
-static unsigned short _unique_identifier_data = (unsigned short)0x30F0;
+static unsigned short _unique_identifier_data = (unsigned short)0x8421;
 
 static int
 _get_unique_identifier_data(struct mls_eoj* eoj, unsigned char epc,
@@ -186,7 +193,7 @@ _get_number_of_self_node_instances(struct mls_eoj* eoj, unsigned char epc,
     *len -= size;
     buf[0] = 0x00;
     buf[1] = 0x00;
-    buf[2] = 0x01;
+    buf[2] = 0x01; /* temperature_sensor */
     return size;
 }
 
@@ -199,7 +206,7 @@ _get_number_of_self_node_classes(struct mls_eoj* eoj, unsigned char epc,
     int size = 2;
     *len -= size;
     buf[0] = 0x00;
-    buf[1] = 0x01;
+    buf[1] = 0x02; /* profile + temperature_sensor */
     return size;
 }
 

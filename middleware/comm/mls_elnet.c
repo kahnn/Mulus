@@ -25,7 +25,17 @@ SENDTO(int sockfd, const void *buf, size_t len, int flags,
     ssize_t slen;
     if (_is_packet_hex_dump) {
         /* TODO: refine hex dump log */
-        fprintf(stderr, "[SEND]: len=%d\n", (int)len);
+#if 1
+        {
+            char hbuf[NI_MAXHOST], sbuf[NI_MAXSERV];
+            getnameinfo((struct sockaddr *)dest_addr, addrlen,
+                hbuf, sizeof(hbuf),
+                sbuf, sizeof(sbuf),
+                NI_NUMERICHOST | NI_NUMERICSERV);
+            fprintf(stderr,
+                "[SEND]: %s:%s:len=%d\n", hbuf, sbuf, (int)len);
+        }
+#endif
         mls_log_hexdump((char*)buf, len, stderr);
     }
 
@@ -119,13 +129,15 @@ _set_property(unsigned char* buf, unsigned int* len,
     struct mls_eoj* eoj, struct mls_epr* prop)
 {
     unsigned char size = ((UCHAR_MAX <= *len) ? UCHAR_MAX : *len);
+    int dsize;
+
+    dsize = prop->getf(eoj, prop->epc, &(buf[2]), &size);
     buf[0] = prop->epc;
-    prop->getf(eoj, prop->epc, &(buf[2]), &size);
-    buf[1] = size;
+    buf[1] = (unsigned char)dsize;
 
-    *len -= (int)size;
+    *len -= (dsize + 2);
 
-    return size;
+    return (dsize + 2);
 }
 
 static int
@@ -599,7 +611,7 @@ mls_elnet_announce_profile(struct mls_elnet *elnet, struct mls_node *node)
     proplen = _set_property(req->data, &proplen, 
         profile, 
         mls_eoj_get_property(profile, MLS_EL_EPC_INSTANCE_LIST_NOTIFICATION));
-    reqlen = MLS_ELNET_FRAME_HEADER_LENGTH + 2 + proplen;
+    reqlen = MLS_ELNET_FRAME_HEADER_LENGTH + proplen;
 
     {
         int ret;

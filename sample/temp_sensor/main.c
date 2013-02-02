@@ -60,6 +60,7 @@ init(char *ifname, struct mls_el_ctx **ctxpp)
     struct mls_node *node;
     struct mls_elnet *elnet;
     struct mls_el_ctx *context;
+
     /* 必要に応じて独自の情報を渡せるようにする.
        後からは mls_el_get_tag() で取り出せる */
     void *tag = "TemperatureSensor-TAG";

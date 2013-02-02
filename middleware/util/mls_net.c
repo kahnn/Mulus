@@ -249,7 +249,7 @@ mls_net_mcast_srv_open(const char* maddr, const char *mport, const char *ifaddr)
         hints.ai_socktype = SOCK_DGRAM;
         hints.ai_flags = AI_PASSIVE;
         /* TODO: XXX arg ifaddr? */
-        ret = getaddrinfo(ifaddr, mport, &hints, &res);
+        ret = getaddrinfo(NULL, mport, &hints, &res);
         if (0 != ret) {
             errlog("getaddrinfo():%s\n", gai_strerror(ret));
             goto out;
