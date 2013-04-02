@@ -10,6 +10,7 @@
 #include <unistd.h>
 #include <sys/param.h>
 #include <sys/types.h>
+#include <sys/stat.h>
 #include <sys/socket.h>
 #include <sys/un.h>
 #include <sys/wait.h>
@@ -142,7 +143,17 @@ mls_net_mcast_open_ctx(const char* maddr, const char *mport, const char *ifaddr)
             goto out;
         }
     }
-
+#if 0    
+    /* Set recv buffer size */
+    {
+        int size = 64*1024;
+        if (setsockopt(sock, SOL_SOCKET, SO_RCVBUF, &size, sizeof(size)) < 0)
+        {
+            errlog("setsockopt():SO_RCVBUF:%s\n", strerror(errno));
+            goto out;
+        }
+    }
+#endif
     /* Set multicast TTL */
     {
         unsigned char op2 = MLS_NET_MULTICAST_TTL;
@@ -242,6 +253,44 @@ mls_net_mcast_close_ctx(struct mls_net_mcast_ctx* ctx)
     free(ctx);
 }
 
+struct mls_net_ucast_ctx*
+mls_net_ucast_open_ctx(void)
+{
+    int sock = -1;
+    struct mls_net_ucast_ctx* ctx = NULL;
+
+    /* Create socket */
+    sock = socket(PF_INET, SOCK_DGRAM, 0);
+    if (-1 == sock) {
+        errlog("socket():%s\n", strerror(errno));
+        goto out;
+    }
+
+    /* Create context */
+    ctx = malloc(sizeof(*ctx));
+    if (NULL == ctx) {
+        errlog("malloc():%s\n", strerror(errno));
+        goto out;
+    }
+    memset(ctx, 0, sizeof(ctx));
+    ctx->sock = sock;
+
+out:
+    if (NULL == ctx) {
+        if (-1 != sock) {
+            close(sock);
+        }
+    }
+    return ctx;
+}
+
+void
+mls_net_ucast_close_ctx(struct mls_net_ucast_ctx* ctx)
+{
+    close(ctx->sock);
+    free(ctx);
+}
+
 struct mls_net_ud_srv*
 mls_net_udgram_srv_open(const char* addr)
 {
@@ -249,6 +298,7 @@ mls_net_udgram_srv_open(const char* addr)
     int sock = -1;
     char srv_addr[MLS_NET_LEN_ADDR];
     struct sockaddr_un name;
+    int old_umask;
 
     /* Create socket */
     sock = socket(AF_UNIX, SOCK_DGRAM, 0);
@@ -264,10 +314,12 @@ mls_net_udgram_srv_open(const char* addr)
     name.sun_family = AF_UNIX;
     strcpy(name.sun_path, srv_addr);
 
+    old_umask = umask(0);
     if (bind(sock, (struct sockaddr*)&name, sizeof(struct sockaddr_un))) {
         errlog("bind():binding name to datagram socket:%s\n", strerror(errno));
         goto out;
     }
+    umask(old_umask);
 
     /* Create server-context */
     srv = malloc(sizeof(*srv));
@@ -303,6 +355,7 @@ mls_net_udgram_cln_open(const char *addr)
     int sock = -1;
     char cln_addr[MLS_NET_LEN_ADDR];
     struct sockaddr_un name;
+    int old_umask;
 
     /* Create socket */
     sock = socket(AF_UNIX, SOCK_DGRAM, 0);
@@ -318,10 +371,12 @@ mls_net_udgram_cln_open(const char *addr)
     name.sun_family = AF_UNIX;
     strcpy(name.sun_path, cln_addr);
 
+    old_umask = umask(0);
     if (bind(sock, (struct sockaddr*)&name, sizeof(struct sockaddr_un))) {
         errlog("bind():binding name to datagram socket:%s\n", strerror(errno));
         goto out;
     }
+    umask(old_umask);
 
     /* Create client-context */
     cln = malloc(sizeof(*cln));

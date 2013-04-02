@@ -2,6 +2,12 @@
 #include <string.h>
 #include <ctype.h>
 #include <limits.h>
+#include <dirent.h>
+#include <sys/types.h>
+#include <sys/stat.h>
+#include <sys/time.h>
+#include <unistd.h>
+#include <time.h>
 #include <errno.h>
 
 #include "mls_type.h"
@@ -17,6 +23,63 @@ static unsigned char _res[MLS_ELNET_FRAME_LENGTH_MAX];
 
 /* TODO: 設定で切り替え可能にする */
 static int _is_packet_hex_dump = 1;
+static int  _is_pdump_file;
+static char *_pdump_dir;
+
+static void
+dump_packet(const char* prefix,
+            const struct sockaddr *addr, socklen_t addrlen,
+            const void *buf, size_t len)
+{
+    char hbuf[NI_MAXHOST], sbuf[NI_MAXSERV];
+    FILE *fp = stderr;
+    struct timeval tv;
+    struct tm dater;
+
+    getnameinfo((struct sockaddr *)addr, addrlen,
+                hbuf, sizeof(hbuf),
+                sbuf, sizeof(sbuf),
+                NI_NUMERICHOST | NI_NUMERICSERV);
+
+    gettimeofday(&tv, NULL);
+    localtime_r(&(tv.tv_sec), &dater);
+    
+    if (_is_pdump_file) {
+        char fname[256];
+        sprintf(fname, "%s/%4d%02d%02d-%02d%02d%02d.%06d", 
+                _pdump_dir,
+                (dater.tm_year + 1900), (dater.tm_mon + 1), dater.tm_mday,
+                dater.tm_hour, dater.tm_min, dater.tm_sec, (int)tv.tv_usec);
+        fp = fopen(fname, "w");
+        if (NULL == fp) {
+            LOG_ERR(MLS_LOG_DEFAULT_MODULE,
+                    "fopen(%s): %d, %s.\n", fname, errno, strerror(errno));
+            goto out;
+        }
+    }
+    
+    fprintf(fp, "%4d/%02d/%02d %02d:%02d:%02d.%06d %s: %s:%s: len=%d\n",
+            (dater.tm_year + 1900), (dater.tm_mon + 1), dater.tm_mday, 
+            dater.tm_hour, dater.tm_min, dater.tm_sec, (int)tv.tv_usec,
+            prefix, hbuf, sbuf, (int)len);
+    if (MLS_ELNET_FRAME_HEADER_LENGTH <= len) {
+        struct mls_elnet_frame *frame = (struct mls_elnet_frame *)buf;
+        fprintf(fp,
+                "  tid=%d,seoj(%02X,%02X,%02X),deoj(%02X,%02X,%02X),esv=%X\n",
+                (int)frame->tid,
+                frame->seoj.cgc, frame->seoj.clc, frame->seoj.inc,
+                frame->deoj.cgc, frame->deoj.clc, frame->deoj.inc,
+                frame->esv);
+    }
+    mls_log_hexdump((char*)buf, len, fp);
+
+    if (_is_pdump_file) {
+        fclose(fp);
+    }
+
+  out:
+    return;
+}
 
 static ssize_t
 SENDTO(int sockfd, const void *buf, size_t len, int flags,
@@ -24,19 +87,7 @@ SENDTO(int sockfd, const void *buf, size_t len, int flags,
 {
     ssize_t slen;
     if (_is_packet_hex_dump) {
-        /* TODO: refine hex dump log */
-#if 1
-        {
-            char hbuf[NI_MAXHOST], sbuf[NI_MAXSERV];
-            getnameinfo((struct sockaddr *)dest_addr, addrlen,
-                hbuf, sizeof(hbuf),
-                sbuf, sizeof(sbuf),
-                NI_NUMERICHOST | NI_NUMERICSERV);
-            fprintf(stderr,
-                "[SEND]: %s:%s:len=%d\n", hbuf, sbuf, (int)len);
-        }
-#endif
-        mls_log_hexdump((char*)buf, len, stderr);
+        dump_packet("[SEND]", dest_addr, addrlen, buf, len);
     }
 
     slen = sendto(sockfd, buf, len, flags, dest_addr, addrlen);
@@ -50,23 +101,53 @@ RECVFROM(int sockfd, void *buf, size_t len, int flags,
     ssize_t rlen;
     rlen = recvfrom(sockfd, buf, len, flags, from, addrlen);
     if ((0 < rlen) && _is_packet_hex_dump) {
-        /* TODO: refine hex dump log */
-#if 1
-        {
-            char hbuf[NI_MAXHOST], sbuf[NI_MAXSERV];
-            getnameinfo((struct sockaddr *)from, *addrlen,
-                hbuf, sizeof(hbuf),
-                sbuf, sizeof(sbuf),
-                NI_NUMERICHOST | NI_NUMERICSERV);
-            fprintf(stderr,
-                "[RECV]: %s:%s:rlen/len=%d/%d\n",
-                hbuf, sbuf, (int)rlen, (int)len);
-        }
-#endif
-        mls_log_hexdump((char*)buf, rlen, stderr);
+        dump_packet("[RECV]", from, *addrlen, buf, rlen);
     }
 
     return rlen;
+}
+
+static int
+clear_pdump(char *pdump_dir)
+{
+    int ret = 0;
+    DIR *dp;
+    struct dirent *ent;
+    
+    if (NULL == pdump_dir) {
+        goto out;
+    }
+
+    if ((dp = opendir(pdump_dir)) == NULL) {
+        ret = -errno;
+        LOG_ERR(MLS_LOG_DEFAULT_MODULE,
+                "opendir(%s): %d, %s.\n", pdump_dir, errno, strerror(errno));
+        goto out;
+    }
+    while ((ent = readdir(dp)) != NULL) {
+        struct stat statbuf;
+        char fname[256];
+
+        sprintf(fname, "%s/%s", pdump_dir, ent->d_name);
+        lstat(fname, &statbuf);
+        if (S_ISREG(statbuf.st_mode)) {
+#if 0
+            printf(">>> fname = %s\n", fname);
+#endif
+            unlink(fname);
+        }
+    }
+    closedir(dp);
+
+  out:
+    return ret;
+}
+
+void
+mls_elnet_set_pdump(int is_pdump_file, char *pdump_dir)
+{
+    _is_pdump_file = is_pdump_file;
+    _pdump_dir = pdump_dir;
 }
 
 /***************************************************************/
@@ -75,7 +156,7 @@ RECVFROM(int sockfd, void *buf, size_t len, int flags,
   @arg ifname  ex."eth0" -or- "192.168.11.131" ....
  */
 struct mls_elnet*
-mls_elnet_init(char *ifname)
+mls_elnet_init(char *ifname, int is_pdump_file, char *pdump_dir)
 {
     struct mls_net_mcast_ctx* srv = NULL;
     struct mls_elnet* elnet = NULL;
@@ -101,6 +182,14 @@ mls_elnet_init(char *ifname)
             "mls_net_mcast_srv_open() error.\n");
         goto out;
     }
+    {
+        /* clear dump dir */
+        if (clear_pdump(pdump_dir) < 0) {
+            goto out;
+        }
+    }
+    _is_pdump_file = is_pdump_file;
+    _pdump_dir = pdump_dir;
 
     elnet = &_lelnet;
     elnet->ctx = srv;
@@ -856,6 +945,115 @@ mls_elnet_rpc(struct mls_net_mcast_ctx *cln, char *addr, char *port,
     /* retry over */
     ret = -1;
     LOG_ERR(MLS_LOG_DEFAULT_MODULE, "message rpc, retry over(%d,%d)\n", i, ret);
+
+out:
+    return ret;
+}
+
+int
+mls_elnet_infreq(struct mls_net_mcast_ctx *cln,
+                 struct mls_elnet_frame *req, int reqlen,
+                 struct mls_elnet_infres *resl, int reslnum)
+{
+    int ret = 0;
+    int sock = cln->sock;
+    struct sockaddr_storage *top;
+    socklen_t tolen;
+    fd_set mask;
+    int width;
+    int i, retry = 1, wait_sec = 3;
+    int resli = 0;
+    struct mls_elnet_infres *res = &(resl[resli]);
+
+    top = &(cln->to);
+    tolen = cln->tolen;
+
+    FD_ZERO(&mask);
+    FD_SET(sock, &mask);
+    width = sock + 1;
+
+    for (i = 0; i < retry; i++) {
+        fd_set ready;
+        struct timeval timeout;
+
+        ret = SENDTO(sock, (char*)req, reqlen, 0,
+            (struct sockaddr*)top, tolen);
+        if (-1 == ret) {
+            ret = -errno;
+            LOG_ERR(MLS_LOG_DEFAULT_MODULE,
+                "sendto(%d,%s)\n", errno, strerror(errno));
+            goto out;
+        }
+    re_select:
+        ready = mask;
+        timeout.tv_sec = wait_sec;
+        timeout.tv_usec = 0;
+
+        switch (select(width, (fd_set*)&ready, NULL, NULL, &timeout)) {
+        case -1:
+            ret = -errno;
+            LOG_ERR(MLS_LOG_DEFAULT_MODULE,
+                "select(%d,%s)\n", errno, strerror(errno));
+            goto out;
+        case 0:
+            /* timeout, retry */
+            break;
+
+        default:
+            if (FD_ISSET(sock, &ready)) {
+                ssize_t len;
+
+                /* recv response */
+                res->fromlen = sizeof(res->from);
+                if ((len = RECVFROM(sock, res->res, res->reslen, 0,
+                            (struct sockaddr*)&(res->from),
+                            &(res->fromlen))) == -1)
+                {
+                    ret = -errno;
+                    LOG_ERR(MLS_LOG_DEFAULT_MODULE,
+                        "recvfrom(%d,%s)\n", errno, strerror(errno));
+                    if (EAGAIN == -ret) {
+                        goto re_select;
+                    }
+                    goto out;
+                }
+
+                /* un-marshal response */
+                ret = _unmarshal_frame_response(req, res->res, len);
+                if (ret < 0) {
+                    /* ignore message retry, error log */
+                    LOG_WARN(MLS_LOG_DEFAULT_MODULE,
+                        "_unmarshal_frame_response(%d), ignore message\n", ret);
+                    goto re_select;
+                }
+
+                /* OK, response packet */
+                {
+                    resli++;
+                    if (resli < reslnum) {
+                        LOG_INFO(MLS_LOG_DEFAULT_MODULE,
+                                 "message recv(%d,%d), and next packet.\n", i, resli);
+                        res = &(resl[resli]);
+                        goto re_select;
+                    }
+                    ret = resli;
+                    LOG_INFO(MLS_LOG_DEFAULT_MODULE,
+                             "message rpc, ok(%d,%d)\n", i, ret);
+                    goto out;
+                }
+            }
+            break;
+        }
+    }
+
+    /* retry over */
+    if (0 < resli) {
+        ret = resli;
+    } else {
+        ret = -1;
+    }
+    LOG_ERR(MLS_LOG_DEFAULT_MODULE,
+            "message rpc, retry over(%d,%d), recv(%d)\n", i, ret, resli);
 
 out:
     return ret;

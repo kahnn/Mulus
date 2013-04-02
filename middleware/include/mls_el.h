@@ -12,7 +12,7 @@
 #include "mls_elope.h"
 
 /* time interval (sec.) */
-#define MLS_EL_TIMEINTERVAL_SEC (10)
+#define MLS_EL_TIMEINTERVAL_SEC (60)
 
 struct mls_el_ctx;
 

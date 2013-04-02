@@ -192,10 +192,10 @@ mls_log_hexdump(char* data, unsigned long size, FILE* outfp)
         char cbuf[16+1];
         int cpos;
 		
-        lpos += sprintf(lpos, "%08lX  ", addr);
+        lpos += sprintf(lpos, "  %08lX  ", addr);
 
         for (cpos = 0; cpos < 16; cpos++) {
-            char ch, dl;
+            char ch, *dl;
             if (size <= addr) {
                 cbuf[cpos] = '\0';
                 for (;cpos < 16; cpos++) {
@@ -205,8 +205,8 @@ mls_log_hexdump(char* data, unsigned long size, FILE* outfp)
             }
             ch = data[addr];
             lpos += sprintf(lpos, "%02X", ((unsigned char)ch & 0xff));
-            dl = (7 == cpos) ? '-' : ' ';
-            lpos += sprintf(lpos, "%c", dl);
+            dl = (7 == cpos) ? "  " : " ";
+            lpos += sprintf(lpos, "%s", dl);
 
             cbuf[cpos] = (0x20 <= ch && ch < 0x7F) ? ch : '.';
             addr++;

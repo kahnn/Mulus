@@ -6,6 +6,7 @@
 
 #include "mls_dlink.h"
 #include "mls_evt.h"
+#include "mls_config.h"
 
 /* 
  * Class Group Code.
@@ -71,17 +72,41 @@
 /* 
  * Common Property Value.
  */
+/* Basic type - code */
+#define MLS_EL_EDT_SCHAR_UNDERFLOW   ((unsigned char)0x80)
+#define MLS_EL_EDT_SCHAR_OVERFLOW    ((unsigned char)0x7F)
+#define MLS_EL_EDT_SSHORT_UNDERFLOW  ((unsigned char)0x8000)
+#define MLS_EL_EDT_SSHORT_OVERFLOW   ((unsigned char)0x7FFF)
+#define MLS_EL_EDT_SLONG_UNDERFLOW   ((unsigned char)0x80000000)
+#define MLS_EL_EDT_SLONG_OVERFLOW    ((unsigned char)0x7FFFFFFF)
+
+#define MLS_EL_EDT_UCHAR_UNDERFLOW   ((unsigned char)0xFE)
+#define MLS_EL_EDT_UCHAR_OVERFLOW    ((unsigned char)0xFF)
+#define MLS_EL_EDT_USHORT_UNDERFLOW  ((unsigned char)0xFFFE)
+#define MLS_EL_EDT_USHORT_OVERFLOW   ((unsigned char)0xFFFF)
+#define MLS_EL_EDT_ULONG_UNDERFLOW   ((unsigned char)0xFFFFFFFE)
+#define MLS_EL_EDT_ULONG_OVERFLOW    ((unsigned char)0xFFFFFFFF)
+
 /* MLS_EL_EPC_OPERATION_STATUS */
 #define MLS_EL_EDT_OPERATION_STATUS_ON   ((unsigned char)0x30)
 #define MLS_EL_EDT_OPERATION_STATUS_OFF  ((unsigned char)0x31)
 /* MLS_EL_EPC_INSTALLATION_LOCATION         */
+#define MLS_EL_EDT_INSTALLATION_LOCATION_INITIAL_STATE ((unsigned char)0x00)
+#define MLS_EL_EDT_INSTALLATION_LOCATION_INDEFINITE    ((unsigned char)0xFF)
 /* MLS_EL_EPC_STANDARD_VERSION_INFORMATION  */
 /* MLS_EL_EPC_IDENTIFICATION_NUMBER         */
+#define MLS_EL_EPC_IDENTIFICATION_NUMBER_MAKER17       ((unsigned char)0xFE)
+#define MLS_EL_EPC_IDENTIFICATION_NUMBER_PROTOCOL9     ((unsigned char)0xFF)
+#define MLS_EL_EPC_IDENTIFICATION_NUMBER_INITIAL_STATE ((unsigned char)0x00)
 /* MLS_EL_EPC_MEASURED_INSTANTANEOUS_POWER_CONSUMPTION */
 /* MLS_EL_EPC_MEASURED_CUMULATIVE_POWER_CONSUMPTION */
 /* MLS_EL_EPC_MANUFACTURERS_FAULT_CODE      */
 /* MLS_EL_EPC_CURRENT_LIMIT_SETTING         */
+#define MLS_EL_EDT_CURRENT_LIMIT_SETTING_MIN  ((unsigned char)0x00) /*   0% */
+#define MLS_EL_EDT_CURRENT_LIMIT_SETTING_MAX  ((unsigned char)0x64) /* 100% */
 /* MLS_EL_EPC_FAULT_STATUS                  */
+#define MLS_EL_EDT_FAULT_STATUS_OCCURRENCE ((unsigned char)0x41)
+#define MLS_EL_EDT_FAULT_STATUS_NONE       ((unsigned char)0x42)
 /* MLS_EL_EPC_FAULT_DESCRIPTION             */
 /* MLS_EL_EPC_MANUFACTURER_CODE             */
 /* MLS_EL_EPC_BUSINESS_FACILITY             */
@@ -89,12 +114,17 @@
 /* MLS_EL_EPC_PRODUCTION_NUMBER             */
 /* MLS_EL_EPC_PRODUCTION_DATE               */
 /* MLS_EL_EPC_POWER_SAVING_OPERATION_SETTING */
-
+#define MLS_EL_EDT_POWER_SAVING_OPERATION_SETTING_ENABLE   ((unsigned char)0x41)
+#define MLS_EL_EDT_POWER_SAVING_OPERATION_SETTING_DISABLE  ((unsigned char)0x42)
 /* MLS_EL_EPC_POSITION_INFORMATION          */
 /* MLS_EL_EPC_CURRENT_TIME_SETTING          */
 /* MLS_EL_EPC_CURRENT_DATE_SETTING          */
 /* MLS_EL_EPC_POWER_LIMIT_SETTING           */
 /* MLS_EL_EPC_CUMULATIVE_OPERATING_TIME     */
+#define MLS_EL_EDT_CUMULATIVE_OPERATING_TIME_UNIT_SEC   ((unsigned char)0x41)
+#define MLS_EL_EDT_CUMULATIVE_OPERATING_TIME_UNIT_MIN   ((unsigned char)0x42)
+#define MLS_EL_EDT_CUMULATIVE_OPERATING_TIME_UNIT_HOUR  ((unsigned char)0x43)
+#define MLS_EL_EDT_CUMULATIVE_OPERATING_TIME_UNIT_DAY   ((unsigned char)0x44)
 /* MLS_EL_EPC_SETM_PROPERTY                 */
 /* MLS_EL_EPC_GETM_PROPERTY                 */
 /* MLS_EL_EPC_STATUS_CHANGE_ANNOUNCEMENT_PROPERTY_MAP */
@@ -111,6 +141,11 @@
 /* ---------------------------------------------------------------- */
 
 struct mls_eoj;
+
+/*
+ * initialize function.
+ */
+typedef int (*mls_epr_init_t)(struct mls_conf* conf);
 
 /*
  * @arg eoj object.
@@ -153,6 +188,7 @@ struct mls_epr {
     int access_attr;
 
     /* access function */
+    mls_epr_init_t initf;
     mls_epr_get_t getf;
     mls_epr_set_t setf;
     mls_epr_anno_t annof;

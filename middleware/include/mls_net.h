@@ -24,6 +24,14 @@ struct mls_net_mcast_ctx {
     char ifaddr[MLS_NET_LEN_ADDR];
 };
 
+struct mls_net_ucast_ctx {
+    int sock;
+    struct sockaddr_storage to;
+    socklen_t tolen;
+    struct sockaddr_storage from;
+    socklen_t fromlen;
+};
+
 #define MLS_NET_UNIX_DOMAIN_SRV_SUFFIX "_srv"
 #define MLS_NET_UNIX_DOMAIN_CLN_SUFFIX "_cln"
 
@@ -46,6 +54,9 @@ struct mls_net_ud_cln {
  */
 extern struct mls_net_mcast_ctx* mls_net_mcast_open_ctx(const char* maddr, const char *mport, const char *ifaddr);
 extern void mls_net_mcast_close_ctx(struct mls_net_mcast_ctx*);
+
+extern struct mls_net_ucast_ctx* mls_net_ucast_open_ctx(void);
+extern void mls_net_ucast_close_ctx(struct mls_net_ucast_ctx*);
 
 extern struct mls_net_ud_srv* mls_net_udgram_srv_open(const char*);
 extern void mls_net_udgram_srv_close(struct mls_net_ud_srv*);

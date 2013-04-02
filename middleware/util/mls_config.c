@@ -8,6 +8,7 @@
 #include <string.h>
 #include <stdlib.h>
 #include <assert.h>
+#include <unistd.h>
 #include <ctype.h>
 #include <errno.h>
 #include "mls_config.h"
@@ -42,22 +43,30 @@ struct mls_conf* mls_conf_ini(char* path)
     if (conf) {
         memset(conf, 0, sizeof(*conf));
         conf->path = strdup(path);
-        if (NULL == conf->path) {
+        conf->work_path = strdup(path);
+        if (NULL == conf->path || NULL == conf->work_path) {
             free(conf);
             conf = NULL;
+            goto out;
+        }
+        {
+            int len = strlen(path);
+            memcpy(&(conf->work_path[len - 3]), "TMP", 3);
         }
     }
+  out:
     return conf;
 }
 
 void mls_conf_fin(struct mls_conf* conf)
 {
     struct mls_conf_prop *pp;
-	
+
     if (NULL == conf) {
         return;
     }
     free(conf->path);
+    free(conf->work_path);
     pp = conf->root;
     while (NULL != pp) {
         struct mls_conf_prop *pnext = pp->p_next;
@@ -117,7 +126,7 @@ void mls_conf_load(struct mls_conf* conf)
             }
             (*ptail) = pp;
             ptail = &(pp->p_next);
-            CDBG("Comment -or- empty '%s', %s@%d\n", savep, path, lineno);
+            CDBG("Comment -or- empty '%s', %s@%d\n", savep, conf->path, lineno);
             continue; 
         }
 
@@ -126,7 +135,7 @@ void mls_conf_load(struct mls_conf* conf)
         }
         if ('\0' == *cp) {
   no_value:
-            CDBG("No value for key '%s', %s@%d\n", savep, path, lineno);
+            CDBG("No value for key '%s', %s@%d\n", savep, conf->path, lineno);
             continue;
         }
 
@@ -139,7 +148,7 @@ void mls_conf_load(struct mls_conf* conf)
             }
             if ('\0' == *cp) {
                 CDBG("No '=' for key '%s', %s@%d\n", 
-                    savep, path, lineno);
+                    savep, conf->path, lineno);
                 continue;
             }
         }
@@ -184,8 +193,8 @@ void mls_conf_store(struct mls_conf* conf)
     FILE* fp;
     struct mls_conf_prop *pp;
 
-    // TODO: Backup & Restore
-    if (NULL == (fp = fopen(conf->path, "w"))) {
+    // Write Work file & Move
+    if (NULL == (fp = fopen(conf->work_path, "w"))) {
         MLS_FATAL_PERROR("Property file '%s' open failed", conf->path);
     }
 
@@ -205,6 +214,9 @@ void mls_conf_store(struct mls_conf* conf)
     }
 
     (void) fclose(fp);
+    sync();
+    rename(conf->work_path, conf->path);
+    sync();
 }
 
 char* mls_conf_get(struct mls_conf* conf, char* key)
@@ -267,4 +279,87 @@ out:
         free(pp);
     }
     return ret;
+}
+
+int mls_conf_del(struct mls_conf* conf, char* key)
+{
+    int ret = 0;
+    struct mls_conf_prop **ppp, *pp = NULL;
+
+    for (ppp = &(conf->root); NULL != (*ppp); ppp = &((*ppp)->p_next)) {
+        CDBG("(0) conf->root=%p, pp=%p, ppp=%p, *ppp=%p, (*ppp)->p_next=%p\n",
+             conf->root, pp, ppp, *ppp, (*ppp)->p_next);
+        if ((MLS_CONF_DATA == (*ppp)->p_type)
+            && (0 == strcmp((*ppp)->p_key, key)))
+        {
+            struct mls_conf_prop *target = *ppp;
+            /* found key */
+            if (!pp) {
+                conf->root = target->p_next;
+                CDBG("(1) conf->root=%p, pp=%p, ppp=%p, *ppp=%p, (*ppp)->p_next=%p\n",
+                     conf->root, pp, ppp, *ppp, (*ppp)->p_next);
+            } else {
+                pp->p_next = target->p_next;
+                CDBG("(2) conf->root=%p, pp=%p, ppp=%p, *ppp=%p, (*ppp)->p_next=%p\n",
+                     conf->root, pp, ppp, *ppp,
+                     ((NULL != *ppp) ? (char*)(*ppp)->p_next: "NULL"));
+            }
+            
+            free(target->p_key);
+            free(target->p_val);
+            free(target);
+
+            ret = 1;
+            goto out;
+        }
+        pp = *ppp;
+    }
+    /* not found key, nothing todo. */
+
+out:
+    return ret;
+}
+
+void
+mls_conf_iterator(struct mls_conf* conf, struct mls_conf_itr* itr)
+{
+    struct mls_conf_prop *pp;
+
+    itr->conf = conf;
+
+    /* skip comment */
+    for (pp = conf->root; NULL != pp; pp = pp->p_next) {
+        if (MLS_CONF_DATA == pp->p_type) {
+            break;
+        }
+    }
+    itr->next = pp;
+}
+
+int
+mls_conf_iterator_next(struct mls_conf_itr* itr, char** key, char** val)
+{
+    struct mls_conf_prop* target = itr->next;
+    struct mls_conf_prop *pp;
+    
+    if (!target) {
+        return 0; /* last item */
+    }
+
+    if (key) {
+        *key = target->p_key;
+    }
+    if (val) {
+        *val = target->p_val;
+    }
+
+    /* skip comment */
+    for (pp = target->p_next; NULL != pp; pp = pp->p_next) {
+        if (MLS_CONF_DATA == pp->p_type) {
+            break;
+        }
+    }
+    itr->next = pp;
+
+    return 1;
 }

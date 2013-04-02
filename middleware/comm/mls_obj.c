@@ -1,3 +1,5 @@
+#include <stdio.h>
+#include <string.h>
 #include "mls_obj.h"
 #include "mls_node.h"
 
@@ -41,9 +43,9 @@ mls_eoj_get_num_properties_in_node(struct mls_node* node, int access)
 static void
 _set_prop_map(unsigned char epc, unsigned char *buf)
 {
-    int h = ((epc >> 4) & 0x0F);
-    int l = (epc & 0x0F);
-    buf[l] = (unsigned char)((buf[l] & 0xFF) | (1 << (h - 8)));
+    unsigned int h = ((epc >> 4) & (unsigned char)0x0F);
+    unsigned int l = (epc & (unsigned char)0x0F);
+    buf[l] = (unsigned char)((buf[l] & (unsigned char)0xFF) | (unsigned char)((1 << (h - 8)) & (unsigned char)0xFF));
 }
 
 int
@@ -51,6 +53,10 @@ mls_eoj_get_property_map(struct mls_eoj* eoj, int access,
     int pnum, unsigned char* buf)
 {
     int i, num = 0;
+
+    if (MLS_EL_PROPERTY_MAP_BORDER <= pnum) {
+        memset(buf, 0, MLS_EL_PROPERTY_MAP_BORDER);
+    }
 
     for (i = 0; i < eoj->nprops; i++) {
         struct mls_epr* epr = &(eoj->props[i]);
