@@ -1,18 +1,11 @@
 /*
-el_prop  {-s|-g} remote-host cg cc ic epc [value]
--sの場合は valueも必要
--gの場合は valueは不要
-remote-host = ipaddr:port
-
--g の際の出力フォーマット: (epc,edata)
-0x82,000042
-
-...
  */
 #include <stdio.h>
 #include <unistd.h>
 #include <stdlib.h>
 #include <limits.h>
+#include <strings.h>
+#include <assert.h>
 #include <errno.h>
 
 #include "mls_type.h"
@@ -26,28 +19,60 @@ remote-host = ipaddr:port
         fprintf(stdout, fmt, ##__VA_ARGS__);      \
   }while(0)
 
-/**********************************************************************/
-int _run_mode; /* -s=1 -or -g=0 */
-char *_remote_host;
-struct mls_eoj_code _eoj_code;
-unsigned char _epc;
-char *_epc_val = "dummy";
+#define _PDUMP_DIR "/psm/logs/pktdump"
+#define _USE_UCAST_CONTEXT
 
-unsigned char _epc_rawdata[UCHAR_MAX];
-unsigned char _epc_rawdata_len;
+/* epc [data]
+ */
+struct _prop_arg {
+    unsigned char epc;
+    char *data;
+};
+
+/**********************************************************************/
+static char *_remote_host;
+static struct mls_eoj_code _eoj_code;
+static int _is_pdump_file = 0; /* default: output to file. */
+static char* _ifname = "eth0";
+
+static struct _prop_arg _set_prop[UCHAR_MAX];
+unsigned char _set_prop_len;
+static struct _prop_arg _get_prop[UCHAR_MAX];
+unsigned char _get_prop_len;
+
+static unsigned char _esv_code;
 
 struct mls_net_mcast_ctx* _cln_ctx = NULL;
-
 static unsigned char _req[MLS_ELNET_FRAME_LENGTH_MAX];
 static unsigned char _res[MLS_ELNET_FRAME_LENGTH_MAX];
 
 /**********************************************************************/
 
-void
+static void
 usage(char *name)
 {
-    errlog("Usage: %s {-s|-g} remote-host cgc clc inc epc [value]\n", name);
+    errlog("Usage: %s [-i interface-name] -h remote-host -d destination-eoj \n", name);
+    errlog("             [-s epc value] ... [-g epc] ...\n");
+    errlog("       interface-name: specified interface-name, default eth0.\n");
+    errlog("       remote-host: ip-address:port\n");
+    errlog("       destination-eoj: cgc clc inc, Ex.) 0EF001 \n");
+    errlog("Result: \n");
+    errlog("        {S|G},epc,pdc[,edt] ....\n");
+    errlog("    Ex.)\n");
+    errlog("        S,80,0,\n");
+    errlog("        G,80,1,31\n");
     exit(-1);
+}
+
+static unsigned char
+parse_uchar(char *data)
+{
+    char token[2+1];
+    token[0] = data[0];
+    token[1] = data[1];
+    token[2] = '\0';
+
+    return (unsigned char)strtoul(token, NULL, 16);
 }
 
 static int
@@ -55,16 +80,10 @@ parse_rawdata(char *data, unsigned char *rawdata, unsigned char* rawdata_len)
 {
     int i, len = strlen(data);
     char *str = data;
-    char token[2+1];
 
     *rawdata_len = 0;
     for (i = 0, str = data; i < len; i += 2, str += 2) {
-        token[0] = str[0];
-        token[1] = str[1];
-        token[2] = '\0';
-
-        *rawdata = (unsigned char)strtoul(token, NULL, 16);
-
+        *rawdata = parse_uchar(str);
         rawdata += 1;
         *rawdata_len += 1;
     }
@@ -72,56 +91,84 @@ parse_rawdata(char *data, unsigned char *rawdata, unsigned char* rawdata_len)
     return (int)*rawdata_len;
 }
 
-static void
-output_data(unsigned char epc, unsigned char *datap, unsigned int datalen)
+static unsigned char
+_select_esv(void)
 {
-    int i;
-
-    showlog("%02X,", epc);
-    for (i = 0; i < datalen; i++) {
-        showlog("%02X", *(datap + i));
+    unsigned char esv_code;
+    if (0 == _set_prop_len) {
+        if (0 == _get_prop_len) {
+            assert(0);
+        } else {
+            esv_code = MLS_ELNET_ESV_Get;
+        }
+    } else {
+        if (0 == _get_prop_len) {
+            esv_code = MLS_ELNET_ESV_SetC;
+        } else {
+            esv_code = MLS_ELNET_ESV_SetGet;
+        }
     }
-    showlog("\n");
+     
+    return esv_code;
 }
 
-static void
+static int
 parse_args(int argc, char* argv[])
 {
-    int opt;
-    while ((opt = getopt(argc, argv, "sg")) != -1) {
+    int opt, ret = 0;
+    while ((opt = getopt(argc, argv, "ni:h:d:s:g:")) != -1) {
         switch (opt) {
+        case 'i':
+            _ifname = optarg;
+            break;
+        case 'n':
+            _is_pdump_file = 0; /* output to stderr */
+            break;
+        case 'h':
+            _remote_host = optarg;
+            break;
+        case 'd':
+            _eoj_code.cgc = parse_uchar(optarg);
+            _eoj_code.clc = parse_uchar(optarg + 2);
+            _eoj_code.inc = parse_uchar(optarg + 4);
+            break;
         case 'g':
-            _run_mode = 0;
+            _get_prop[_get_prop_len].epc = (unsigned char)strtoul(optarg, NULL, 16);
+            _get_prop_len++;
             break;
         case 's':
-            _run_mode = 1;
+            _set_prop[_set_prop_len].epc = (unsigned char)strtoul(optarg, NULL, 16);
+            _set_prop[_set_prop_len].data = argv[optind++];
+            _set_prop_len++;
             break;
         default: /* '?' */ 
             usage(argv[0]);
             break;
         }
     }
-    if (!((_run_mode == 0 && argc == 7) || (_run_mode == 1 && argc == 8))) {
+    if (!_remote_host || (0 == _get_prop_len && 0 == _set_prop_len))
+    {
         usage(argv[0]);
     }
 
-    _remote_host = argv[optind++];
-    _eoj_code.cgc = (unsigned char)strtoul(argv[optind++], NULL, 16);
-    _eoj_code.clc = (unsigned char)strtoul(argv[optind++], NULL, 16);
-    _eoj_code.inc = (unsigned char)strtoul(argv[optind++], NULL, 16);
-    _epc = (unsigned char)strtoul(argv[optind++], NULL, 16);
-    if (_run_mode) {
-        _epc_val = argv[optind++];
-    }
+    _esv_code = _select_esv();
 
 #if 0
-    errlog("%d:%s:%x,%x,%x:%x,%s\n",
-        _run_mode, _remote_host, 
-        _eoj_code.cgc, _eoj_code.clc, _eoj_code.inc, _epc, _epc_val);
+    {
+        int i;
+        errlog("%s,%s,%x,%x,%x\n",
+               _ifname, _remote_host, 
+               _eoj_code.cgc, _eoj_code.clc, _eoj_code.inc);
+        for (i = 0; i < _set_prop_len; i++) {
+            errlog("SET:%d: %x=%s\n", i, _set_prop[i].epc, _set_prop[i].data);
+        }
+        for (i = 0; i < _get_prop_len; i++) {
+            errlog("GET:%d: %x\n", i, _get_prop[i].epc);
+        }
+        exit(0);
+    }
 #endif
-
-    if (_run_mode)
-        parse_rawdata(_epc_val, _epc_rawdata, &_epc_rawdata_len);
+    return ret;
 }
 
 static int
@@ -140,6 +187,14 @@ open_sock(char *ifname)
     errlog("ifaddr => %s\n", ifaddr);
 #endif
 
+#ifdef _USE_UCAST_CONTEXT
+    _cln_ctx = (struct mls_net_mcast_ctx*)mls_net_ucast_open_ctx();
+    if (NULL == _cln_ctx) {
+        errlog("mls_net_ucast_cln_open() error.\n");
+        ret = -1;
+        goto out;
+    }
+#else  /* _USE_UCAST_CONTEXT */
     _cln_ctx = 
         mls_net_mcast_open_ctx(MLS_ELNET_MCAST_ADDRESS,
             MLS_ELNET_MCAST_PORT, ifaddr);
@@ -148,6 +203,9 @@ open_sock(char *ifname)
         ret = -1;
         goto out;
     }
+#endif  /* _USE_UCAST_CONTEXT */
+
+    mls_elnet_set_pdump(_is_pdump_file, _PDUMP_DIR);
 
 out:
     return ret;
@@ -157,18 +215,135 @@ static int
 parse_addr(char *host, char **addr, char **port)
 {
     int ret = 0;
-    char *saveptr;
+    char *del;
 
-    *addr = strtok_r(host, ":", &saveptr);
-    *port = strtok_r(NULL, ":", &saveptr);
-    if (NULL == *addr || NULL == *port) {
+    if (NULL == (del = rindex(host, ':'))) {
         errlog("inavlid host format:%s\n", host);
         ret = -1;
         goto out;
     }
 
-out:
+    /* get port-number */
+    *port = (del + 1);
+    *del = '\0';
+
+    /* get hostname -or- ip-address */
+    if ('[' == *host) {
+        /* for ipv6 [] style ==> ex.) [2001:db8::1]:80 */
+        *addr = (host + 1);
+        *(del - 1) = '\0';
+    } else {
+        *addr = host;
+    }
+
+  out:
     return ret;
+}
+
+#define ENTER_ASSEMBLE_FRAME(r) int r = 0
+#define FINALLY_ASSEMBLE_FRAME()  out:
+#define EXIT_ASSEMBLE_FRAME(r)  return r
+#define ASSEMBLE_FRAME(dp, dl, sp, sl, r)         \
+do {                                              \
+    if (dl < sl) {                                \
+        r = -ENOMEM;                              \
+        goto out;                                 \
+    }                                             \
+    memcpy(dp, sp, sl);                           \
+    dp += sl; dl -= sl;                           \
+} while(0)
+
+/*
+ * data -> OPC
+ */
+static int
+_setup_frame_data(unsigned char *data, int dlen,
+                  struct _prop_arg *setp, unsigned char slen,
+                  struct _prop_arg *getp, unsigned char glen)
+{
+    int i, org_len = dlen;
+    unsigned char *dp = data; 
+    unsigned char rawdata[UCHAR_MAX], rawdata_len;
+    ENTER_ASSEMBLE_FRAME(ret);
+
+    /*
+     * Set properties.
+     */
+    if (NULL != setp && 0 < slen) {
+        /* OPC - Set */
+        ASSEMBLE_FRAME(dp, dlen, &slen, sizeof(slen), ret);
+        for (i = 0; i < slen; i++, setp++) {
+            parse_rawdata(setp->data, rawdata, &rawdata_len);
+            ASSEMBLE_FRAME(dp, dlen, &(setp->epc), sizeof(setp->epc), ret);
+            ASSEMBLE_FRAME(dp, dlen, &rawdata_len, sizeof(rawdata_len), ret);
+            ASSEMBLE_FRAME(dp, dlen, rawdata, rawdata_len, ret);
+        }
+    }
+
+    /*
+     * Get properties.
+     */
+    if (NULL != getp && 0 < glen) {
+        /* OPC - Get */
+        ASSEMBLE_FRAME(dp, dlen, &glen, sizeof(glen), ret);
+        for (i = 0; i < glen; i++, getp++) {
+            rawdata_len = 0;
+            ASSEMBLE_FRAME(dp, dlen, &getp->epc, sizeof(getp->epc), ret);
+            ASSEMBLE_FRAME(dp, dlen, &rawdata_len, sizeof(rawdata_len), ret);
+        }
+    }
+
+    /* OK */
+    ret = org_len - dlen;
+    
+    FINALLY_ASSEMBLE_FRAME();
+    EXIT_ASSEMBLE_FRAME(ret);
+}
+
+static int
+output_one_prop(char ope, unsigned char *edata)
+{
+    int i;
+    unsigned char pdc;
+    unsigned char *dp = edata;
+
+    showlog("%c,", ope); /* Set -or- Get */
+    showlog("%02x,", dp[0]); /* EPC */
+    pdc = dp[1];
+    showlog("%02x,", pdc);      /* PDC */
+    dp += 2;
+    for (i = 0; i < pdc; i++) {
+        showlog("%02x", *dp++);
+    }
+    showlog("\n");
+
+    return dp - edata;
+}
+
+static void
+output_data(unsigned char *data)
+{
+    int i;
+    unsigned char opc;
+    unsigned char *edata = data;
+
+    /* first byte is opc */
+    opc = *edata++;
+    for (i = 0; i < opc; i++) {
+        /* Set -or- Get */
+        edata += output_one_prop(((MLS_ELNET_ESV_Get == _esv_code) ? 'G' : 'S'), edata);
+    }
+
+    if (MLS_ELNET_ESV_SetGet != _esv_code) {
+        return;
+    }
+
+    /* Get data (SetGet service) */
+    opc = *edata++;
+    for (i = 0; i < opc; i++) {
+        /* Get only */
+        edata += output_one_prop('G', edata);
+    }
 }
 
 static int
@@ -189,24 +364,23 @@ command(void)
 
     /* create request */
     {
+        int dlen;
         struct mls_eoj_code seoj, deoj;
         seoj.cgc = MLS_EL_CGC_PROFILE;
         seoj.clc = MLS_EL_CLC_NODEPROFILE;
         seoj.inc = 0x01;
         deoj = _eoj_code;
 
-        mls_elnet_setup_frame_header(req,
-            &seoj, &deoj, 
-            ((_run_mode) ? MLS_ELNET_ESV_SetC : MLS_ELNET_ESV_Get),
-            1, 1);
-        req->data[0] = _epc;
-        if (_run_mode) {
-            req->data[1] = _epc_rawdata_len;
-            memcpy(&(req->data[2]), _epc_rawdata, _epc_rawdata_len);
-        } else {
-            req->data[1] = 0;
+        mls_elnet_setup_frame_header(req, &seoj, &deoj, _esv_code, 1, 1);
+        dlen = _setup_frame_data((req->data - 1),
+                                 (reqlen - MLS_ELNET_FRAME_HEADER_LENGTH),
+                                 _set_prop, _set_prop_len, _get_prop, _get_prop_len);
+        if (dlen < 0) {
+            errlog("Error _setup_frame_data(%d)\n", dlen);
+            ret = dlen;
+            goto out;
         }
-        reqlen = MLS_ELNET_FRAME_HEADER_LENGTH + 2 + req->data[1];
+        reqlen = MLS_ELNET_FRAME_HEADER_LENGTH - 1  + dlen;
     }
 
     /* RPC */
@@ -228,9 +402,7 @@ command(void)
         goto out;
     }
     /* output result */
-    output_data(_epc,
-        ((_run_mode) ? _epc_rawdata : &(res->data[2])),
-        ((_run_mode) ? _epc_rawdata_len : (res->data[1])));
+    output_data(&(res->opc));
     ret = 0;
 
 out:
@@ -241,13 +413,14 @@ int
 main(int argc, char* argv[])
 {
     int ret = 0;
-    char* ifname = "eth0";
 
     (void)mls_el_ini();
 
-    parse_args(argc, argv);
+    if (parse_args(argc, argv) < 0) {
+        goto out;
+    }
 
-    if ((ret = open_sock(ifname)) != 0) {
+    if ((ret = open_sock(_ifname)) != 0) {
         goto out;
     }
 
@@ -256,8 +429,13 @@ main(int argc, char* argv[])
     }
 
 out:
-    if (NULL != _cln_ctx)
+    if (NULL != _cln_ctx) {
+#ifdef _USE_UCAST_CONTEXT
+        mls_net_ucast_close_ctx((struct mls_net_ucast_ctx*)_cln_ctx);
+#else  /* _USE_UCAST_CONTEXT */
         mls_net_mcast_close_ctx(_cln_ctx);
+#endif  /* _USE_UCAST_CONTEXT */
+    }
 
     mls_el_fin();
     return ret;

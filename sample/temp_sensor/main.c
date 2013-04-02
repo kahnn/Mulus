@@ -3,6 +3,7 @@
  */
 #include <stdio.h>
 #include <stdlib.h>
+#include <unistd.h>
 #include <string.h>
 #include <errno.h>
 
@@ -26,6 +27,11 @@ extern struct mls_eoj* mls_el_get_temperature_sensor(void);
 
 /**********************************************************************/
 
+static char* _ifname = "eth0";
+static int _is_pdump_file = 0; /* default: output to stderr. */
+
+/**********************************************************************/
+
 /*
  * time interval handler.
  * プログラム全体で定期的に実行したい処理がある場合に登録する。
@@ -44,6 +50,38 @@ _timeinterval_handler(struct mls_evt* evt, void* tag)
 #endif
 }
 
+void
+usage(char *name)
+{
+    errlog("Usage: %s [-i ifname] \n", name);
+    errlog("   ifname:      default is eth0\n");
+    exit(-1);
+}
+
+static void
+parse_args(int argc, char* argv[])
+{
+    int opt;
+    while ((opt = getopt(argc, argv, "i:h")) != -1) {
+        switch (opt) {
+          case 'i':
+            _ifname = optarg;
+            break;
+          case 'h':
+          default: /* '?' */ 
+            usage(argv[0]);
+            break;
+        }
+    }
+    if (!(0 == (argc - optind))) {
+        usage(argv[0]);
+    }
+
+#if 0
+    errlog("ifname = %s\n", _ifname);
+#endif
+}
+
 /*
  初期化：
    initialize 
@@ -54,7 +92,7 @@ _timeinterval_handler(struct mls_evt* evt, void* tag)
    create context
  */
 static int
-init(char *ifname, struct mls_el_ctx **ctxpp)
+init(char *ifname, int is_pdump_file, struct mls_el_ctx **ctxpp)
 {
     int ret = 0;
     struct mls_eoj *profile, *temp_sensor;
@@ -86,7 +124,8 @@ init(char *ifname, struct mls_el_ctx **ctxpp)
     mls_el_node_add_device(node, temp_sensor);
 
     /* Initialize network */
-    elnet = mls_elnet_init(ifname);
+    elnet =
+    mls_elnet_init(ifname, is_pdump_file, NULL);
     if (NULL == elnet) {
         ret = -ENOENT;
         goto out;
@@ -108,7 +147,9 @@ out:
 static void
 term(struct mls_el_ctx *ctx)
 {
-    mls_el_destroy_context(ctx);
+    if (ctx) {
+        mls_el_destroy_context(ctx);
+    }
     mls_el_fin();
 }
 
@@ -129,14 +170,11 @@ int
 main(int argc, char* argv[])
 {
     int ret = 0;
-    char* ifname = "eth0";
     struct mls_el_ctx *ctx = NULL;
 
-    if (2 <= argc) {
-        ifname = argv[1];
-    }
+    parse_args(argc, argv);
 
-    ret = init(ifname, &ctx);
+    ret = init(_ifname, _is_pdump_file, &ctx);
     if (ret < 0) {
         goto out;
     }

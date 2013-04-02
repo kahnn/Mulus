@@ -18,34 +18,55 @@
         fprintf(stdout, fmt, ##__VA_ARGS__);      \
   }while(0)
 
+#define _PDUMP_DIR "/psm/logs/pktdump"
+#define _RECV_PACKET_NUM_MAX 5
+
 /**********************************************************************/
 struct mls_eoj_code _cond_code;
 struct mls_net_mcast_ctx* _cln_ctx = NULL;
+char* _ifname = "eth0";
 static unsigned char _req[MLS_ELNET_FRAME_LENGTH_MAX];
-static unsigned char _res[MLS_ELNET_FRAME_LENGTH_MAX];
+static unsigned char _res[_RECV_PACKET_NUM_MAX][MLS_ELNET_FRAME_LENGTH_MAX];
+static int _is_pdump_file = 1; /* default: output to file. */
 /**********************************************************************/
 
 void
 usage(char *name)
 {
-    errlog("Usage: %s cgc clc inc\n", name);
+    errlog("Usage: %s [-i interface-name] [-n] cgc clc inc\n", name);
+    errlog("       -i: specified interface-name, default eth0.\n");
+    errlog("       -n: don't output packet-dump to file.\n");
     exit(-1);
 }
 
 static void
 parse_args(int argc, char* argv[])
 {
-    if (argc != 4) {
+    int opt;
+    while ((opt = getopt(argc, argv, "ni:")) != -1) {
+        switch (opt) {
+        case 'i':
+            _ifname = optarg;
+            break;
+        case 'n':
+            _is_pdump_file = 0; /* output to stderr */
+            break;
+        default: /* '?' */ 
+            usage(argv[0]);
+            break;
+        }
+    }
+    if (!(3 == (argc - optind))) {
         usage(argv[0]);
     }
 
-    _cond_code.cgc = (unsigned char)strtoul(argv[1], NULL, 16);
-    _cond_code.clc = (unsigned char)strtoul(argv[2], NULL, 16);
-    _cond_code.inc = (unsigned char)strtoul(argv[3], NULL, 16);
+    _cond_code.cgc = (unsigned char)strtoul(argv[optind++], NULL, 16);
+    _cond_code.clc = (unsigned char)strtoul(argv[optind++], NULL, 16);
+    _cond_code.inc = (unsigned char)strtoul(argv[optind++], NULL, 16);
 
 #if 0
-    errlog("%x,%x,%x\n",
-        _cond_code.cgc, _cond_code.clc, _cond_code.inc);
+    errlog("%s:%x,%x,%x\n",
+        _ifname, _cond_code.cgc, _cond_code.clc, _cond_code.inc);
 #endif
 }
 
@@ -73,6 +94,8 @@ open_sock(char *ifname)
         ret = -1;
         goto out;
     }
+
+    mls_elnet_set_pdump(_is_pdump_file, _PDUMP_DIR);
 
 out:
     return ret;
@@ -130,11 +153,11 @@ out:
 static int
 command(void)
 {
-    int ret = 0, rpc_reslen;
+    int ret = 0, i, rpc_reslen, found_num;
     struct mls_elnet_frame *req = (struct mls_elnet_frame*)_req;
     unsigned int reqlen = sizeof(_req);
-    struct mls_elnet_frame *res = (struct mls_elnet_frame*)_res;
-    int reslen = sizeof(_res);
+    struct mls_elnet_infres resl[_RECV_PACKET_NUM_MAX];
+    int retry_max = 2, retry = 0;
 
     /* create request */
     {
@@ -151,41 +174,56 @@ command(void)
         req->data[1] = 0;
         reqlen = MLS_ELNET_FRAME_HEADER_LENGTH + 2 + req->data[1];
     }
+    /* prepare response */
+    for (i = 0; i < _RECV_PACKET_NUM_MAX; i++) {
+        resl[i].res = (struct mls_elnet_frame*)&(_res[i][0]);
+        resl[i].reslen = MLS_ELNET_FRAME_LENGTH_MAX;
+    }
 
     /* RPC */
-rpc_exec:
-    rpc_reslen = mls_elnet_rpc(_cln_ctx, NULL, NULL, req, reqlen, res, reslen);
+re_rpcexec:
+    rpc_reslen = mls_elnet_infreq(_cln_ctx, req, reqlen, resl, _RECV_PACKET_NUM_MAX);
     if (rpc_reslen < 0) {
         errlog("Error mls_elnet_rpc(%d)\n", rpc_reslen);
         ret = -1;
         goto out;
     }
 
-    /* epc */
-    if (MLS_EL_EPC_INSTANCE_LIST_NOTIFICATION != res->data[0]) {
-        /* ignore message retry, error log */
-        errlog("ignore message retry(0, %d)\n", res->data[0]);
-        goto rpc_exec;
-    }
-    /* pdc */
-    if (res->data[1] == 0) {
-        /* ignore message retry, error log */
-        errlog("ignore message retry(1, %d)\n", res->data[1]);
-        goto rpc_exec;
-    }
+    found_num = 0;
+    for (i = 0; i < rpc_reslen; i++) {
+        struct mls_elnet_frame *res = resl[i].res;
 
-    /*
-     * OK! response valid packet.
-     */
-    /* check result */
-    {
-        ret = find_and_print_eoj(&(_cln_ctx->from), _cln_ctx->fromlen,
-            &(res->data[2]), res->data[1], &_cond_code);
-        if (ret != 0) {
+        /* epc */
+        if (MLS_EL_EPC_INSTANCE_LIST_NOTIFICATION != res->data[0]) {
             /* ignore message retry, error log */
-            errlog("ignore message retry(2, %d)\n", ret);
-            goto rpc_exec;
+            errlog("ignore message retry(0, %d)\n", res->data[0]);
+            continue;
         }
+        /* pdc */
+        if (res->data[1] == 0) {
+            /* ignore message retry, error log */
+            errlog("ignore message retry(1, %d)\n", res->data[1]);
+            continue;
+        }
+
+        /*
+         * OK! response valid packet.
+         */
+        /* check result */
+        ret = find_and_print_eoj(&(resl[i].from), resl[i].fromlen,
+                                 &(res->data[2]), res->data[1], &_cond_code);
+        if (ret == 0) {
+            found_num++;
+        }
+    }
+    if (0 < found_num) {
+        ret = 0;
+    } else {
+        if (retry < retry_max) {
+            retry++;
+            goto re_rpcexec;
+        }
+        ret = -1;
     }
 
 out:
@@ -196,13 +234,12 @@ int
 main(int argc, char* argv[])
 {
     int ret = 0;
-    char* ifname = "eth0";
 
     (void)mls_el_ini();
 
     parse_args(argc, argv);
 
-    if ((ret = open_sock(ifname)) != 0) {
+    if ((ret = open_sock(_ifname)) != 0) {
         goto out;
     }
 

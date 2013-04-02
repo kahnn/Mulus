@@ -51,7 +51,7 @@ parse_rawdata(char *data, unsigned char *rawdata, unsigned char* rawdata_len)
 {
     int i, len = strlen(data);
     char *str = data;
-    char token[2];
+    char token[2+1];
 
     *rawdata_len = 0;
     for (i = 0, str = data; i < len; i += 2, str += 2) {
@@ -80,9 +80,10 @@ output_data(unsigned char epc, unsigned char *datap, unsigned int datalen)
     showlog("\n");
 }
 
-static void
+static int
 parse_args(int argc, char* argv[])
 {
+    int ret = 0;
     int opt;
     while ((opt = getopt(argc, argv, "sg")) != -1) {
         switch (opt) {
@@ -117,6 +118,8 @@ parse_args(int argc, char* argv[])
 
     if (_run_mode)
         parse_rawdata(_epc_val, _epc_rawdata, &_epc_rawdata_len);
+
+    return ret;
 }
 
 static int
@@ -201,7 +204,9 @@ main(int argc, char* argv[])
 
     (void)mls_el_ini();
 
-    parse_args(argc, argv);
+    if (parse_args(argc, argv) < 0) {
+        goto out;
+    }
 
     if ((ret = open_sock()) != 0) {
         goto out;
