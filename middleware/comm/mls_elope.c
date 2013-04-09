@@ -2,6 +2,7 @@
 #include <string.h>
 #include <ctype.h>
 #include <limits.h>
+#include <sys/select.h>
 #include <errno.h>
 
 #include "mls_elope.h"

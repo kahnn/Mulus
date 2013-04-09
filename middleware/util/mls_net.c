@@ -647,6 +647,7 @@ mls_net_show_if_by_name(char* name)
                     &((struct sockaddr_in *)ifa->ifa_addr)->sin_addr,
                     addr_str,
                     sizeof(addr_str)));
+#if 0 /* For Mac */
             /* point-point address */
             if (ifa->ifa_ifu.ifu_dstaddr)
                 showlog("dstaddr[%d]=%s\n",
@@ -661,6 +662,7 @@ mls_net_show_if_by_name(char* name)
                         &((struct sockaddr_in *)ifa->ifa_ifu.ifu_broadaddr)->sin_addr,
                         addr_str,
                         sizeof(addr_str)));
+#endif /* For Mac */
             /* netmask */
             showlog("netmask[%d]=%s\n", i, inet_ntop(AF_INET,
                     &((struct sockaddr_in *)ifa->ifa_netmask)->sin_addr,
@@ -673,6 +675,7 @@ mls_net_show_if_by_name(char* name)
                     &((struct sockaddr_in6 *)ifa->ifa_addr)->sin6_addr,
                     addr_str,
                     sizeof(addr_str)));
+#if 0 /* For Mac */
             /* point-point address */
             if (ifa->ifa_ifu.ifu_dstaddr)
                 showlog("dstaddr6[%d]=%s\n",
@@ -680,6 +683,7 @@ mls_net_show_if_by_name(char* name)
                         &((struct sockaddr_in6 *)ifa->ifa_ifu.ifu_dstaddr)->sin6_addr,
                         addr_str,
                         sizeof(addr_str)));
+#endif /* For Mac */
             /* netmask */
             showlog("netmask6[%d]=%s\n",
                 i, inet_ntop(AF_INET6,
@@ -692,6 +696,7 @@ mls_net_show_if_by_name(char* name)
     }
     freeifaddrs(ifaddrs);
 
+#if 0  /* For Mac */
     /* MAC address */
     if (ioctl(sock, SIOCGIFHWADDR, &ifreq) == -1) {
         ret = -errno;
@@ -707,6 +712,7 @@ mls_net_show_if_by_name(char* name)
             *(p+4),
             *(p+5));
     }
+#endif /* For Mac */
 
 out:
     if (-1 != sock) {
